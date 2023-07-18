@@ -2,28 +2,28 @@
 """Training on a single process."""
 import torch
 import sys
-
-from onmt.utils.logging import init_logger, logger
-from onmt.utils.parse import ArgumentParser
-from onmt.constants import CorpusTask
-from onmt.transforms import (
+from trankit.tpipeline import TaggerDataset, TPipeline
+from .utils.logging import init_logger, logger
+from .utils.parse import ArgumentParser
+from .constants import CorpusTask
+from .transforms import (
     make_transforms,
     save_transforms,
     get_specials,
     get_transforms_cls,
 )
-from onmt.inputters import build_vocab, IterOnDevice
-from onmt.inputters.inputter import dict_to_vocabs, vocabs_to_dict
-from onmt.inputters.dynamic_iterator import build_dynamic_dataset_iter
-from onmt.inputters.text_corpus import save_transformed_sample
-from onmt.model_builder import build_model
-from onmt.models.model_saver import load_checkpoint
-from onmt.utils.optimizers import Optimizer
-from onmt.utils.misc import set_random_seed
-from onmt.trainer import build_trainer
-from onmt.models import build_model_saver
-from onmt.modules.embeddings import prepare_pretrained_embeddings
-
+from .inputters import build_vocab, IterOnDevice
+from .inputters.inputter import dict_to_vocabs, vocabs_to_dict
+from .inputters.dynamic_iterator import build_dynamic_dataset_iter
+from .inputters.text_corpus import save_transformed_sample
+from .model_builder import build_model
+from .models.model_saver import load_checkpoint
+from .utils.optimizers import Optimizer
+from .utils.misc import set_random_seed
+from .trainer import build_trainer
+from .models import build_model_saver
+from .modules.embeddings import prepare_pretrained_embeddings
+from .utils.misc import TConfig
 
 def prepare_transforms_vocabs(opt):
     """Prepare or dump transforms before training."""
@@ -202,18 +202,40 @@ def main(opt, device_id):
         opt, device_id, model, vocabs, optim, model_saver=model_saver
     )
 
-    _train_iter = _build_train_iter(
-        opt,
-        transforms_cls,
-        vocabs,
-        stride=max(1, len(opt.gpu_ranks)),
-        offset=max(0, device_id),
-    )
-    train_iter = IterOnDevice(_train_iter, device_id)
+    if opt.trankit :
+        # tester sur un fichier a part
+        # tconfig might need some adjustements from the 
+        # TPipeline._setup_config() function
+        tconfig = TConfig(opt)
+        breakpoint()
+        train_iter = TaggerDataset(
+            config=tconfig,
+            input_conllu=tconfig.train_conllu_fpath,
+            gold_conllu=tconfig.train_conllu_fpath,
+            evaluate=False
+        )
+        train_iter.numberize()
 
-    valid_iter = _build_valid_iter(opt, transforms_cls, vocabs)
-    if valid_iter is not None:
-        valid_iter = IterOnDevice(valid_iter, device_id)
+        valid_iter = TaggerDataset(
+            config=tconfig,
+            input_conllu=tconfig.dev_conllu_fpath,
+            gold_conllu=tconfig.dev_conllu_fpath,
+            evaluate=False
+        )
+        valid_iter.numberize()
+    else :
+        _train_iter = _build_train_iter(
+            opt,
+            transforms_cls,
+            vocabs,
+            stride=max(1, len(opt.gpu_ranks)),
+            offset=max(0, device_id),
+        )
+        train_iter = IterOnDevice(_train_iter, device_id)
+        valid_iter = _build_valid_iter(opt, transforms_cls, vocabs)
+        if valid_iter is not None:
+            valid_iter = IterOnDevice(valid_iter, device_id)
+        
 
     if len(opt.gpu_ranks):
         logger.info("Starting training on GPU: %s" % opt.gpu_ranks)
@@ -230,6 +252,8 @@ def main(opt, device_id):
         save_checkpoint_steps=opt.save_checkpoint_steps,
         valid_iter=valid_iter,
         valid_steps=opt.valid_steps,
+        trankit = opt.trankit,
+        epoch=opt.epoch
     )
 
     if trainer.report_manager.tensorboard_writer is not None:

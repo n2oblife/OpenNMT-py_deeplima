@@ -110,3 +110,6 @@ ENV/
 
 # Tensorboard
 runs/
+
+# files from the tuto
+docs/source/examples/wmt17_en_de/ 

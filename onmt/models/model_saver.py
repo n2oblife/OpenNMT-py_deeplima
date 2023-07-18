@@ -12,7 +12,7 @@ def build_model_saver(model_opt, opt, model, vocabs, optim):
     os.makedirs(os.path.dirname(save_model_path), exist_ok=True)
 
     model_saver = ModelSaver(
-        opt.save_model, model, model_opt, vocabs, optim, opt.keep_checkpoint
+        opt.save_model, model, model_opt, vocabs, optim, opt.keep_checkpoint,
     )
     return model_saver
 
@@ -45,7 +45,7 @@ class ModelSaverBase(object):
         if keep_checkpoint > 0:
             self.checkpoint_queue = deque([], maxlen=keep_checkpoint)
 
-    def save(self, step, moving_average=None):
+    def save(self, step, moving_average=None, epoch = 1):
         """Main entry point for model saver
 
         It wraps the `_save` method with checks and apply `keep_checkpoint`
@@ -62,7 +62,7 @@ class ModelSaverBase(object):
                 model_params_data.append(param.data)
                 param.data = avg.data
 
-        chkpt, chkpt_name = self._save(step, save_model)
+        chkpt, chkpt_name = self._save(step, save_model, epoch)
         self.last_saved_step = step
 
         if moving_average:
@@ -75,7 +75,7 @@ class ModelSaverBase(object):
                 self._rm_checkpoint(todel)
             self.checkpoint_queue.append(chkpt_name)
 
-    def _save(self, step, model):
+    def _save(self, step, model, epoch):
         """Save a resumable checkpoint.
 
         Args:
@@ -105,7 +105,8 @@ class ModelSaverBase(object):
 class ModelSaver(ModelSaverBase):
     """Simple model saver to filesystem"""
 
-    def _save(self, step, model):
+    # epoch added for trankit's training
+    def _save(self, step, model, epoch = 1):
         if (
             hasattr(self.model_opt, "lora_layers")
             and len(self.model_opt.lora_layers) > 0
@@ -128,7 +129,9 @@ class ModelSaver(ModelSaverBase):
             "opt": self.model_opt,
             "optim": self.optim.state_dict(),
         }
-
+        # added for trankit
+        if epoch > 1:
+            self.base_path+=f'_epoch_{epoch}'
         logger.info("Saving checkpoint %s_step_%d.pt" % (self.base_path, step))
         checkpoint_path = "%s_step_%d.pt" % (self.base_path, step)
         torch.save(checkpoint, checkpoint_path)

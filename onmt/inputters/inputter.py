@@ -19,7 +19,12 @@ class IterOnDevice(torch.utils.data.IterableDataset):
     def batch_to_device(tensor_batch, device_id):
         """Move `batch` to `device_id`, cpu if `device_id` < 0."""
         device = torch.device(device_id) if device_id >= 0 else torch.device("cpu")
-        for key in tensor_batch.keys():
+        # adapted for trankit 
+        try :
+            iter_to = tensor_batch.keys()
+        except :
+            iter_to = range(len(tensor_batch))
+        for key in iter_to:
             if key != "src_ex_vocab":
                 tensor_batch[key] = tensor_batch[key].to(device)
 

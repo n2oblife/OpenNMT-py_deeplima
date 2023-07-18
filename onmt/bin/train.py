@@ -2,13 +2,13 @@
 """Train models with dynamic data."""
 import torch
 from functools import partial
-from onmt.utils.distributed import ErrorHandler, consumer
-from onmt.utils.misc import set_random_seed
-from onmt.utils.logging import init_logger, logger
-from onmt.utils.parse import ArgumentParser
-from onmt.opts import train_opts
-from onmt.train_single import main as single_main
-
+from ..utils.distributed import ErrorHandler, consumer
+from ..utils.misc import set_random_seed
+from ..utils.logging import init_logger, logger
+from ..utils.parse import ArgumentParser
+from ..opts import train_opts
+from ..train_single import main as single_main
+from trankit import TPipeline
 
 # Set sharing strategy manually instead of default based on the OS.
 # torch.multiprocessing.set_sharing_strategy('file_system')
@@ -22,7 +22,6 @@ def train(opt):
     ArgumentParser.validate_model_opts(opt)
 
     set_random_seed(opt.seed, False)
-
     train_process = partial(single_main)
 
     nb_gpu = len(opt.gpu_ranks)
@@ -62,7 +61,6 @@ def _get_parser():
 
 def main():
     parser = _get_parser()
-
     opt, unknown = parser.parse_known_args()
     train(opt)
 

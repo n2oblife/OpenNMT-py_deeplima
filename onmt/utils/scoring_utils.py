@@ -95,12 +95,10 @@ class ScoringPreparator:
             transformed_batch(list): A list of examples
         with the fields "src" and "tgt"
         """
-
         transformed_srcs, transformed_src_feats = self.ids_to_tokens_batch_side(
             batch, "src"
         )
         transformed_tgts, _ = self.ids_to_tokens_batch_side(batch, "tgt")
-
         transformed_batch = []
         for src, tgt, *src_feats in zip(
             transformed_srcs, transformed_tgts, *transformed_src_feats
