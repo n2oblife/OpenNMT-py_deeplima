@@ -13,9 +13,10 @@ from torch import Tensor
 
 @enc.register_encoder(name='xlmr')
 class XLMREncoder(enc.EncoderBase) :
+    # TODO add mother class XLMRobertaAdapterModel to avoid having xlmr attribute
     def __init__(self, opt:dict, embeddings = None) -> None:
         super(XLMREncoder, self).__init__()
-        self._adapter_name = opt.task+opt.treebank_name
+        self._adapter_name = opt.task+'_'+opt.treebank_name
         # xlmr encoder
         self.xlmr_dim = 768 if opt.embedding_name == 'xlm-roberta-base' else 1024
         self.xlmr = XLMRobertaAdapterModel.from_pretrained(opt.embedding_name,

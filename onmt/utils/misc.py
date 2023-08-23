@@ -15,13 +15,15 @@ class TConfig():
             self.category =  'customized'
             self.task =  opt.task
             self.save_dir =  opt.save_data
+            self._save_dir = opt.save_data
             self.gpu =   use_gpu(opt)
             self.max_epoch =  opt.train_steps
             self.train_conllu_fpath =  opt.data['corpus_1']['path_tgt']
             self.dev_conllu_fpath =  opt.data['valid']['path_tgt']
             self.batch_size =  opt.batch_size
+            self.treebank_name = opt.treebank_name
 
-    def get_tconfig(self):
+    def get_default_tconfig(self):
         return {'category': self.category, # pipeline category
                 'task': self.task, # task name
                 'save_dir': self.save_dir, # directory for saving trained model

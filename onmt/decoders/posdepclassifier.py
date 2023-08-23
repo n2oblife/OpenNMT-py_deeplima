@@ -19,10 +19,13 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
     def __init__(self, opt:dict,embeddings = None, attentional=True) -> None:
         dec.DecoderBase.__init__(self, attentional)
         self.copy_attn = opt.copy_attn
+        # TODO
         # trankit's config for TPipeline, parameters are : self._param
-        # can be optimized by init only posdep ans useful elements
-        TPipeline.__init__(self, training_config=TConfig(opt).get_tconfig())
-        # self.posdep = PosDepClassifier() # should optimize the init time
+        # can be optimized by init only posdep and useful elements
+        TPipeline.__init__(self, training_config=TConfig(opt).get_default_tconfig())
+        # tconfig = TConfig(opt)
+        # self.posdep = PosDepClassifier(tconfig) # should optimize the init time
+        # or could create a new class adapted from trankit's PosDepClassifier 
         self.embeddings = embeddings # see if needed or overwrite trankit's embeddings
 
     
@@ -41,7 +44,8 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
             cls_reprs (tensor): _description_
 
         Returns:
-            Tuple[list,list]: hte whole descriptions
+            Tuple[list,list]: hte whole descriptions, with the output and raw output of the dependencies
+            for loss calculation
         """
         predictions = self._tagger.predict(batch, word_reprs, cls_reprs)
         preds = self.preds_to_cpu(predictions)
@@ -50,7 +54,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         deps_idxs = self.padding_deps(deps_idxs)
         return preds, deps_idxs
     
-    def preds_to_cpu(self, predictions, dev = False):
+    def preds_to_cpu(self, predictions):
         predicted_upos = predictions[0]
         predicted_xpos = predictions[1]
         predicted_feats = predictions[2]
@@ -62,7 +66,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
 
     def deprel_to_deps(self, predicted_dep, batch):
         """Function wich transform the deprel into deps wich is an 
-        enhanced tool with deprel and heads
+        enhanced deps with deprel and heads
 
         Args:
             predicted_dep (_type_): _description_
@@ -87,8 +91,8 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
     
     def padding_deps(self, dep):
         max_len = max([len(sentences) for sentences in dep])
-        for i,sent in enumerate(dep):
-            for j in range(max_len - len(sent)):
+        for sent in dep:
+            for _ in range(max_len - len(sent)):
                 sent.append(0) # 0 is the padding value
         return dep
     
@@ -114,7 +118,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         return loss, stats
     
     def stats(self, bsz, loss, pred, target):
-        """
+        """ Builds the statistics of the model
         Args:
             loss (int): the loss computed by the loss criterion.
             pred (:obj:`FloatTensor`): the prediction for deps, needed flatten

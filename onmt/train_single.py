@@ -206,23 +206,26 @@ def main(opt, device_id):
         # tester sur un fichier a part
         # tconfig might need some adjustements from the 
         # TPipeline._setup_config() function
-        tconfig = TConfig(opt)
-        breakpoint()
-        train_iter = TaggerDataset(
-            config=tconfig,
-            input_conllu=tconfig.train_conllu_fpath,
-            gold_conllu=tconfig.train_conllu_fpath,
-            evaluate=False
-        )
-        train_iter.numberize()
+        # tconfig = TConfig(opt)
 
-        valid_iter = TaggerDataset(
-            config=tconfig,
-            input_conllu=tconfig.dev_conllu_fpath,
-            gold_conllu=tconfig.dev_conllu_fpath,
-            evaluate=False
-        )
-        valid_iter.numberize()
+        # train_iter = TaggerDataset(
+        #     config=tconfig,
+        #     input_conllu=tconfig.train_conllu_fpath,
+        #     gold_conllu=tconfig.train_conllu_fpath,
+        #     evaluate=False
+        # )
+        # train_iter.numberize()
+
+        # valid_iter = TaggerDataset(
+        #     config=tconfig,
+        #     input_conllu=tconfig.dev_conllu_fpath,
+        #     gold_conllu=tconfig.dev_conllu_fpath,
+        #     evaluate=False
+        # )
+        # valid_iter.numberize()
+
+        train_iter = model.decoder.train_set
+        valid_iter = model.decoder.dev_set
     else :
         _train_iter = _build_train_iter(
             opt,

@@ -343,7 +343,7 @@ class Trainer(object):
                     normalization = sum(
                         onmt.utils.distributed.all_gather_list(normalization)
                     )
-                # changed for trankit's training
+                # trankit arg added for the adaptation
                 self._gradient_accumulation(
                     batches, normalization, total_stats, report_stats, trankit
                 )
@@ -354,9 +354,10 @@ class Trainer(object):
                 if self.average_decay > 0 and i % self.average_every == 0:
                     self._update_average(step)
 
-                report_stats = self._maybe_report_training(
-                    step, train_steps, self.optim.learning_rate(), report_stats
-                )
+                # TODO manage the div by 0
+                # report_stats = self._maybe_report_training(
+                #     step, train_steps, self.optim.learning_rate(), report_stats
+                # )
 
                 if (
                     valid_iterator is not None
@@ -368,21 +369,22 @@ class Trainer(object):
                         trankit=trankit
                     )
 
-                if step % valid_steps == 0 and self.gpu_rank <= 0:
-                    self._report_step(
-                        self.optim.learning_rate(),
-                        step,
-                        valid_stats=valid_stats,
-                        train_stats=total_stats,
-                    )
+                # TODO manage the div by 0
+                # if step % valid_steps == 0 and self.gpu_rank <= 0:
+                #     self._report_step(
+                #         self.optim.learning_rate(),
+                #         step,
+                #         valid_stats=valid_stats,
+                #         train_stats=total_stats,
+                #     )
 
-                    # Run patience mechanism
-                    if self.earlystopper is not None:
-                        self.earlystopper(valid_stats, step)
-                        # If the patience has reached the limit, stop training
-                        if self.earlystopper.has_stopped():
-                            logger.info("earlystopper has_stopped!")
-                            break
+                #     # Run patience mechanism
+                #     if self.earlystopper is not None:
+                #         self.earlystopper(valid_stats, step)
+                #         # If the patience has reached the limit, stop training
+                #         if self.earlystopper.has_stopped():
+                #             logger.info("earlystopper has_stopped!")
+                #             break
             
                 if not(trankit) :
                     if self.model_saver is not None and (
@@ -392,9 +394,11 @@ class Trainer(object):
 
                     if train_steps > 0 and step >= train_steps:
                         break
+    
+                break
             progress.close()
             print(f"step : {step}")
-            
+        breakpoint()
         if self.model_saver is not None:
             self.model_saver.save(step, moving_average=self.moving_average,
                                   epoch=epoch)
@@ -530,8 +534,10 @@ class Trainer(object):
                     start = time.time()
                     for batch in valid_iter:
                         with torch.cuda.amp.autocast(enabled=self.optim.amp):
+                            # trankit's processsing, see trankit's forward code
                             word_reprs, cls_reprs = self.model.encoder(batch)
                             # the goal is to train the deps
+                            # TODO encapsulate these steps to enable other tasks
                             _, deps_pred_idxs = self.model.decoder(batch, word_reprs, cls_reprs)
                             _, batch_stats = self.model.decoder.loss(batch, 
                                                                     word_reprs, 
@@ -543,7 +549,6 @@ class Trainer(object):
                             preds.append(deps_pred_idxs)
                             texts_ref.append(batch.deprel_idxs)
                             stats.update(batch_stats)
-                            breakpoint()
 
                     logger.info(
                         """The translation of the valid dataset
@@ -590,6 +595,7 @@ class Trainer(object):
         finally update the params at the end of the big batch."""
 
         if not(trankit) : 
+            # original processing
             if self.accum_count > 1:
                 self.optim.zero_grad(set_to_none=True)
 
@@ -711,6 +717,7 @@ class Trainer(object):
             self.optim.zero_grad()
             try :
                 with torch.cuda.amp.autocast(enabled=self.optim.amp):
+                    # trankit's processing; see the training code of posdep in tpipeline class
                     word_reprs, cls_reprs = self.model.encoder(true_batches)
                     preds, deps_pred_idxs = self.model.decoder(true_batches, word_reprs, cls_reprs)
                     loss, batch_stats = self.model.decoder.loss(true_batches, 
@@ -718,7 +725,6 @@ class Trainer(object):
                                                                 cls_reprs,
                                                                 torch.tensor(deps_pred_idxs)
                                                                 )
-                    breakpoint()
                     bptt = True # used for onmt
 
                 step = self.optim.training_step
