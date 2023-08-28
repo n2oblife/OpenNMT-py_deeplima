@@ -398,7 +398,6 @@ class Trainer(object):
                 break
             progress.close()
             print(f"step : {step}")
-        breakpoint()
         if self.model_saver is not None:
             self.model_saver.save(step, moving_average=self.moving_average,
                                   epoch=epoch)
@@ -512,7 +511,7 @@ class Trainer(object):
                     param.data = (
                         avg.data.half() if param.dtype == torch.float16 else avg.data
                     )
-            
+
             # Set model in validation mode.
             valid_model.eval()
 
@@ -769,7 +768,7 @@ class Trainer(object):
                     raise exc
 
             # should test decoder.state but no attribute
-            
+
             # in case of multi step gradient accumulation,
             # updtae only after accum batches
             if self.n_gpu > 1:
@@ -781,7 +780,7 @@ class Trainer(object):
                 onmt.utils.distributed.all_reduce_and_rescale_tensors(
                     grads, float(self.n_gpu)
                 )
-            self.optim.step()                 
+            self.optim.step()
 
     def _start_report_manager(self, start_time=None):
         """Simple function to start report manager (if any)"""
