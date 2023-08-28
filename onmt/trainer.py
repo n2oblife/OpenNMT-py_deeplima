@@ -354,10 +354,9 @@ class Trainer(object):
                 if self.average_decay > 0 and i % self.average_every == 0:
                     self._update_average(step)
 
-                # TODO manage the div by 0
-                # report_stats = self._maybe_report_training(
-                #     step, train_steps, self.optim.learning_rate(), report_stats
-                # )
+                report_stats = self._maybe_report_training(
+                    step, train_steps, self.optim.learning_rate(), report_stats
+                )
 
                 if (
                     valid_iterator is not None
@@ -369,33 +368,32 @@ class Trainer(object):
                         trankit=trankit
                     )
 
-                # TODO manage the div by 0
-                # if step % valid_steps == 0 and self.gpu_rank <= 0:
-                #     self._report_step(
-                #         self.optim.learning_rate(),
-                #         step,
-                #         valid_stats=valid_stats,
-                #         train_stats=total_stats,
-                #     )
+                if step % valid_steps == 0 and self.gpu_rank <= 0:
+                    self._report_step(
+                        self.optim.learning_rate(),
+                        step,
+                        valid_stats=valid_stats,
+                        train_stats=total_stats,
+                    )
 
-                #     # Run patience mechanism
-                #     if self.earlystopper is not None:
-                #         self.earlystopper(valid_stats, step)
-                #         # If the patience has reached the limit, stop training
-                #         if self.earlystopper.has_stopped():
-                #             logger.info("earlystopper has_stopped!")
-                #             break
-            
-                if not(trankit) :
-                    if self.model_saver is not None and (
-                        save_checkpoint_steps != 0 and step % save_checkpoint_steps == 0
-                    ):
-                        self.model_saver.save(step, moving_average=self.moving_average)
+                    # Run patience mechanism
+                    if self.earlystopper is not None:
+                        self.earlystopper(valid_stats, step)
+                        # If the patience has reached the limit, stop training
+                        if self.earlystopper.has_stopped():
+                            logger.info("earlystopper has_stopped!")
+                            break
 
-                    if train_steps > 0 and step >= train_steps:
-                        break
-    
-                break
+                # if not(trankit) :
+                if self.model_saver is not None and (
+                    save_checkpoint_steps != 0 and step % save_checkpoint_steps == 0
+                ):
+                    self.model_saver.save(step, moving_average=self.moving_average)
+
+                if train_steps > 0 and step >= train_steps:
+                    break
+
+                # break
             progress.close()
             print(f"step : {step}")
         if self.model_saver is not None:
