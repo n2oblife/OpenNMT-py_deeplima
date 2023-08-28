@@ -240,20 +240,20 @@ class Trainer(object):
             batches.append(batch)
             if self.norm_method == "tokens":
                 # adapted for trankit's training
-                # TODO : see the normalization role in the loss ?
-                try :
+                # TODO : see the normalization role in the loss ?
+                try:
                     num_tokens = (
                         batch["tgt"][:, 1:, 0].ne(self.train_loss.padding_idx).sum()
                     )
                     normalization += num_tokens.item()
                     normalization -= len(batch["tgt"])  # don't count for EOS
-                except :
+                except:
                     normalization += sum(batch.word_num)
             else:
                 # adapted for trankit's training
-                try :
+                try:
                     normalization += len(batch["tgt"])
-                except :
+                except:
                     normalization += sum(batch.word_num)
             if len(batches) == self.accum_count:
                 yield (batches, normalization)
@@ -327,14 +327,14 @@ class Trainer(object):
             train_iterator = self._accum_batches(train_iter)
             epoch = 1
 
-        
+
         for ep in range(epoch):
             if trankit :
                 train_iterator = ((batch,1) for batch in train_dataloader) # generator in comprehesion
-            progress = tqdm(total=int(len(train_iter)/self.model.decoder._config.batch_size)+1, 
+            progress = tqdm(total=int(len(train_iter)/self.model.decoder._config.batch_size)+1,
                             ncols=75, desc=f'Train epoch {ep+1}')
-            for i,(batches, normalization) in enumerate(train_iterator):
-                step = self.optim.training_step 
+            for i, (batches, normalization) in enumerate(train_iterator):
+                step = self.optim.training_step
                 progress.update(1)
                 # UPDATE DROPOUT
                 self._maybe_update_dropout(step)
@@ -343,12 +343,12 @@ class Trainer(object):
                     normalization = sum(
                         onmt.utils.distributed.all_gather_list(normalization)
                     )
-                # trankit arg added for the adaptation
+                # trankit arg added for the adaptation
                 self._gradient_accumulation(
                     batches, normalization, total_stats, report_stats, trankit
                 )
 
-                #testing step
+                # testing step
                 self.optim.step()
 
                 if self.average_decay > 0 and i % self.average_every == 0:
@@ -365,7 +365,7 @@ class Trainer(object):
                     and self.gpu_rank <= 0
                 ):
                     valid_stats = self.validate(
-                        valid_iterator, moving_average=self.moving_average, 
+                        valid_iterator, moving_average=self.moving_average,
                         trankit=trankit
                     )
 
@@ -538,8 +538,8 @@ class Trainer(object):
                             # the goal is to train the deps
                             # TODO encapsulate these steps to enable other tasks
                             _, deps_pred_idxs = self.model.decoder(batch, word_reprs, cls_reprs)
-                            _, batch_stats = self.model.decoder.loss(batch, 
-                                                                    word_reprs, 
+                            _, batch_stats = self.model.decoder.loss(batch,
+                                                                    word_reprs,
                                                                     cls_reprs,
                                                                     torch.tensor(deps_pred_idxs)
                                                                     )
@@ -585,7 +585,7 @@ class Trainer(object):
         return stats
 
     def _gradient_accumulation(
-        self, true_batches, normalization, total_stats, report_stats, 
+        self, true_batches, normalization, total_stats, report_stats,
         trankit=False
     ):
         """Function that iterates over big batches = ``true_batches``
@@ -593,7 +593,7 @@ class Trainer(object):
         Perform a backward on the loss of each sub_batch and
         finally update the params at the end of the big batch."""
 
-        if not(trankit) : 
+        if not(trankit) :
             # original processing
             if self.accum_count > 1:
                 self.optim.zero_grad(set_to_none=True)
@@ -719,8 +719,8 @@ class Trainer(object):
                     # trankit's processing; see the training code of posdep in tpipeline class
                     word_reprs, cls_reprs = self.model.encoder(true_batches)
                     preds, deps_pred_idxs = self.model.decoder(true_batches, word_reprs, cls_reprs)
-                    loss, batch_stats = self.model.decoder.loss(true_batches, 
-                                                                word_reprs, 
+                    loss, batch_stats = self.model.decoder.loss(true_batches,
+                                                                word_reprs,
                                                                 cls_reprs,
                                                                 torch.tensor(deps_pred_idxs)
                                                                 )
@@ -751,9 +751,9 @@ class Trainer(object):
                         computed_metrics[metric] = self.train_scorers[metric]["value"]
                         batch_stats.computed_metrics = computed_metrics
 
-                    self.optim.backward(loss) 
+                    self.optim.backward(loss)
                     total_stats.update(batch_stats)
-                    report_stats.update(batch_stats)     
+                    report_stats.update(batch_stats)
 
             except Exception as exc:
                 trace_content = traceback.format_exc()
