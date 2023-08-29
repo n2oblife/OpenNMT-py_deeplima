@@ -130,7 +130,6 @@ class ModelSaver(ModelSaverBase):
             "optim": self.optim.state_dict(),
             "config": model.encoder.xlmr.config, # get the XLMRConfig from trankit
         }
-        breakpoint()
         # added for trankit
         if epoch > 1:
             self.base_path+=f'_epoch_{epoch}'

@@ -398,7 +398,6 @@ class Trainer(object):
                 break
             progress.close()
             print(f"step : {step}")
-        breakpoint()
         if self.model_saver is not None:
             self.model_saver.save(step, moving_average=self.moving_average,
                                   epoch=epoch)

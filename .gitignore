@@ -94,6 +94,8 @@ celerybeat-schedule
 env/
 venv/
 ENV/
+onmt_env/
+onmt_env_previous/
 
 # Spyder project settings
 .spyderproject
