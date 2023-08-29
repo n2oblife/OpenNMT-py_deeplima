@@ -133,7 +133,7 @@ class ModelSaver(ModelSaverBase):
         # added for trankit
         if epoch > 1:
             self.base_path+=f'_epoch_{epoch}'
-        
+
         #TODO correct the path to the model
         logger.info("Saving checkpoint %s_step_%d.pt" % (self.base_path, step))
         checkpoint_path = "%s_step_%d.pt" % (self.base_path, step)

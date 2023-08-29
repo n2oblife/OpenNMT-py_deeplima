@@ -240,20 +240,20 @@ class Trainer(object):
             batches.append(batch)
             if self.norm_method == "tokens":
                 # adapted for trankit's training
-                # TODO : see the normalization role in the loss ?
-                try :
+                # TODO : see the normalization role in the loss ?
+                try:
                     num_tokens = (
                         batch["tgt"][:, 1:, 0].ne(self.train_loss.padding_idx).sum()
                     )
                     normalization += num_tokens.item()
                     normalization -= len(batch["tgt"])  # don't count for EOS
-                except :
+                except:
                     normalization += sum(batch.word_num)
             else:
                 # adapted for trankit's training
-                try :
+                try:
                     normalization += len(batch["tgt"])
-                except :
+                except:
                     normalization += sum(batch.word_num)
             if len(batches) == self.accum_count:
                 yield (batches, normalization)
@@ -327,14 +327,14 @@ class Trainer(object):
             train_iterator = self._accum_batches(train_iter)
             epoch = 1
 
-        
+
         for ep in range(epoch):
             if trankit :
                 train_iterator = ((batch,1) for batch in train_dataloader) # generator in comprehesion
-            progress = tqdm(total=int(len(train_iter)/self.model.decoder._config.batch_size)+1, 
+            progress = tqdm(total=int(len(train_iter)/self.model.decoder._config.batch_size)+1,
                             ncols=75, desc=f'Train epoch {ep+1}')
-            for i,(batches, normalization) in enumerate(train_iterator):
-                step = self.optim.training_step 
+            for i, (batches, normalization) in enumerate(train_iterator):
+                step = self.optim.training_step
                 progress.update(1)
                 # UPDATE DROPOUT
                 self._maybe_update_dropout(step)
@@ -343,21 +343,20 @@ class Trainer(object):
                     normalization = sum(
                         onmt.utils.distributed.all_gather_list(normalization)
                     )
-                # trankit arg added for the adaptation
+                # trankit arg added for the adaptation
                 self._gradient_accumulation(
                     batches, normalization, total_stats, report_stats, trankit
                 )
 
-                #testing step
+                # testing step
                 self.optim.step()
 
                 if self.average_decay > 0 and i % self.average_every == 0:
                     self._update_average(step)
 
-                # TODO manage the div by 0
-                # report_stats = self._maybe_report_training(
-                #     step, train_steps, self.optim.learning_rate(), report_stats
-                # )
+                report_stats = self._maybe_report_training(
+                    step, train_steps, self.optim.learning_rate(), report_stats
+                )
 
                 if (
                     valid_iterator is not None
@@ -365,37 +364,36 @@ class Trainer(object):
                     and self.gpu_rank <= 0
                 ):
                     valid_stats = self.validate(
-                        valid_iterator, moving_average=self.moving_average, 
+                        valid_iterator, moving_average=self.moving_average,
                         trankit=trankit
                     )
 
-                # TODO manage the div by 0
-                # if step % valid_steps == 0 and self.gpu_rank <= 0:
-                #     self._report_step(
-                #         self.optim.learning_rate(),
-                #         step,
-                #         valid_stats=valid_stats,
-                #         train_stats=total_stats,
-                #     )
+                if step % valid_steps == 0 and self.gpu_rank <= 0:
+                    self._report_step(
+                        self.optim.learning_rate(),
+                        step,
+                        valid_stats=valid_stats,
+                        train_stats=total_stats,
+                    )
 
-                #     # Run patience mechanism
-                #     if self.earlystopper is not None:
-                #         self.earlystopper(valid_stats, step)
-                #         # If the patience has reached the limit, stop training
-                #         if self.earlystopper.has_stopped():
-                #             logger.info("earlystopper has_stopped!")
-                #             break
-            
-                if not(trankit) :
-                    if self.model_saver is not None and (
-                        save_checkpoint_steps != 0 and step % save_checkpoint_steps == 0
-                    ):
-                        self.model_saver.save(step, moving_average=self.moving_average)
+                    # Run patience mechanism
+                    if self.earlystopper is not None:
+                        self.earlystopper(valid_stats, step)
+                        # If the patience has reached the limit, stop training
+                        if self.earlystopper.has_stopped():
+                            logger.info("earlystopper has_stopped!")
+                            break
 
-                    if train_steps > 0 and step >= train_steps:
-                        break
-    
-                break
+                # if not(trankit) :
+                if self.model_saver is not None and (
+                    save_checkpoint_steps != 0 and step % save_checkpoint_steps == 0
+                ):
+                    self.model_saver.save(step, moving_average=self.moving_average)
+
+                if train_steps > 0 and step >= train_steps:
+                    break
+
+                # break
             progress.close()
             print(f"step : {step}")
         if self.model_saver is not None:
@@ -511,7 +509,7 @@ class Trainer(object):
                     param.data = (
                         avg.data.half() if param.dtype == torch.float16 else avg.data
                     )
-            
+
             # Set model in validation mode.
             valid_model.eval()
 
@@ -538,8 +536,8 @@ class Trainer(object):
                             # the goal is to train the deps
                             # TODO encapsulate these steps to enable other tasks
                             _, deps_pred_idxs = self.model.decoder(batch, word_reprs, cls_reprs)
-                            _, batch_stats = self.model.decoder.loss(batch, 
-                                                                    word_reprs, 
+                            _, batch_stats = self.model.decoder.loss(batch,
+                                                                    word_reprs,
                                                                     cls_reprs,
                                                                     torch.tensor(deps_pred_idxs)
                                                                     )
@@ -585,7 +583,7 @@ class Trainer(object):
         return stats
 
     def _gradient_accumulation(
-        self, true_batches, normalization, total_stats, report_stats, 
+        self, true_batches, normalization, total_stats, report_stats,
         trankit=False
     ):
         """Function that iterates over big batches = ``true_batches``
@@ -593,7 +591,7 @@ class Trainer(object):
         Perform a backward on the loss of each sub_batch and
         finally update the params at the end of the big batch."""
 
-        if not(trankit) : 
+        if not(trankit) :
             # original processing
             if self.accum_count > 1:
                 self.optim.zero_grad(set_to_none=True)
@@ -719,8 +717,8 @@ class Trainer(object):
                     # trankit's processing; see the training code of posdep in tpipeline class
                     word_reprs, cls_reprs = self.model.encoder(true_batches)
                     preds, deps_pred_idxs = self.model.decoder(true_batches, word_reprs, cls_reprs)
-                    loss, batch_stats = self.model.decoder.loss(true_batches, 
-                                                                word_reprs, 
+                    loss, batch_stats = self.model.decoder.loss(true_batches,
+                                                                word_reprs,
                                                                 cls_reprs,
                                                                 torch.tensor(deps_pred_idxs)
                                                                 )
@@ -751,9 +749,9 @@ class Trainer(object):
                         computed_metrics[metric] = self.train_scorers[metric]["value"]
                         batch_stats.computed_metrics = computed_metrics
 
-                    self.optim.backward(loss) 
+                    self.optim.backward(loss)
                     total_stats.update(batch_stats)
-                    report_stats.update(batch_stats)     
+                    report_stats.update(batch_stats)
 
             except Exception as exc:
                 trace_content = traceback.format_exc()
@@ -768,7 +766,7 @@ class Trainer(object):
                     raise exc
 
             # should test decoder.state but no attribute
-            
+
             # in case of multi step gradient accumulation,
             # updtae only after accum batches
             if self.n_gpu > 1:
@@ -780,7 +778,7 @@ class Trainer(object):
                 onmt.utils.distributed.all_reduce_and_rescale_tensors(
                     grads, float(self.n_gpu)
                 )
-            self.optim.step()                 
+            self.optim.step()
 
     def _start_report_manager(self, start_time=None):
         """Simple function to start report manager (if any)"""
