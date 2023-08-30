@@ -6,6 +6,7 @@ For the deeplima adaptation using the trankit training method :
 ## Installation
 
 Install the project from the repository
+
 ```bash
 pip install -e .
 pip install -r requirements.opt.txt
@@ -21,10 +22,22 @@ bash onmt_training.sh --train path/to/training/set.conllu --dev path/to/validati
 
 This script will both prepare the dataset and launch the training according to the config file
 
-### Training
+## Training
 
 To launch a training once the dataset is built :
 
 ```bash
 onmt_train -config /path/to/your/config
+```
+
+## Inference
+
+(TODO)
+
+##  C++ conversion
+
+To convert the model into a binary readalbe by CTranslate2, you enter the next command :
+
+```bash
+onmt_release_model --model path/to/model.pt --output path/to/folder --format  ctranslate2
 ```

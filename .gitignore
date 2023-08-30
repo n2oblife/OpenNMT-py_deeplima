@@ -114,5 +114,8 @@ onmt_env_previous/
 # Tensorboard
 runs/
 
+# cache from trankit
+cache/
+
 # files from the tuto
 docs/source/examples/wmt17_en_de/ 

@@ -708,6 +708,7 @@ class Trainer(object):
             self.optim.step()
         # adapted for trankit, will need optimization later
         else :
+            # TODO generalize training for other tasks
             report_stats.n_src_words += sum([len(word_ids) for word_ids in true_batches.word_ids])
             total_stats.n_src_words += sum([len(word_ids) for word_ids in true_batches.word_ids])
 
@@ -716,7 +717,7 @@ class Trainer(object):
                 with torch.cuda.amp.autocast(enabled=self.optim.amp):
                     # trankit's processing; see the training code of posdep in tpipeline class
                     word_reprs, cls_reprs = self.model.encoder(true_batches)
-                    preds, deps_pred_idxs = self.model.decoder(true_batches, word_reprs, cls_reprs)
+                    preds, deps_pred_idxs, _ = self.model.decoder(true_batches, word_reprs, cls_reprs)
                     loss, batch_stats = self.model.decoder.loss(true_batches,
                                                                 word_reprs,
                                                                 cls_reprs,

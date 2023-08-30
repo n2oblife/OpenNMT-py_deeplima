@@ -7,12 +7,10 @@ import onmt.decoders as dec
 from trankit.utils.base_utils import *
 from trankit.utils.conll import *
 from trankit.utils.chuliu_edmonds import chuliu_edmonds_one_root
-from trankit.models import Deep_Biaffine
-from trankit.tpipeline import TPipeline, PosDepClassifier
+from trankit.tpipeline import TPipeline
+import copy
 from onmt.modules.copy_generator import collapse_copy_scores
-from onmt.modules.sparse_losses import SparsemaxLoss
-from onmt.modules.sparse_activations import LogSparsemax
-from ..utils.misc import TConfig
+from onmt.utils.trankit_utils import TConfig
 
 @dec.register_decoder(name='posdep')
 class PosDepDecoder(dec.DecoderBase, TPipeline):
@@ -27,7 +25,9 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         # self.posdep = PosDepClassifier(tconfig) # should optimize the init time
         # or could create a new class adapted from trankit's PosDepClassifier 
         self.embeddings = embeddings # see if needed or overwrite trankit's embeddings
-
+        
+        # TODO next optimization (still long to load), it is the classifier
+        # self._tagger = copy.deepcopy(TPipeline(training_config=TConfig(opt))._tagger)
     
     @classmethod
     def from_opt(cls, opt, embeddings, attentional=True):
@@ -47,13 +47,45 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
             Tuple[list,list]: hte whole descriptions, with the output and raw output of the dependencies
             for loss calculation
         """
-        predictions = self._tagger.predict(batch, word_reprs, cls_reprs)
+        predictions, preds_score = self.predict(batch, word_reprs, cls_reprs)
         preds = self.preds_to_cpu(predictions)
         deps, deps_idxs = self.deprel_to_deps(predictions[3], batch)
         preds.append(deps)
         deps_idxs = self.padding_deps(deps_idxs)
-        return preds, deps_idxs
+        return preds, deps_idxs, preds_score
     
+    def predict(self, batch, word_reprs, cls_reprs):
+        # upos
+        upos_scores = self._tagger.upos_ffn(word_reprs)
+        predicted_upos = torch.argmax(upos_scores, dim=2)
+        # edits
+        xpos_reprs = torch.cat(
+            [word_reprs, self._tagger.upos_embedding(predicted_upos)], dim=2
+        )  # [batch size, num words, xlmr dim + 50]
+        # xpos
+        xpos_scores = self._tagger.xpos_ffn(xpos_reprs)
+        predicted_xpos = torch.argmax(xpos_scores, dim=2)
+        # feats
+        feats_scores = self._tagger.feats_ffn(word_reprs)
+        predicted_feats = torch.argmax(feats_scores, dim=2)
+
+        # head
+        dep_reprs = torch.cat(
+            [cls_reprs, word_reprs], dim=1
+        )  # [batch size, 1 + max num words, xlmr dim] # cls serves as ROOT node
+        dep_reprs = self._tagger.down_project(dep_reprs)
+        unlabeled_scores = self._tagger.unlabeled(dep_reprs, dep_reprs).squeeze(3)
+
+        diag = torch.eye(batch.head_idxs.size(-1) + 1, dtype=torch.bool).unsqueeze(0).to(self._tagger.config.device)
+        unlabeled_scores.masked_fill_(diag, -float('inf'))
+
+        # deprel
+        deprel_scores = self._tagger.deprel(dep_reprs, dep_reprs)
+        dep_preds = []
+        dep_preds.append(F.log_softmax(unlabeled_scores, 2).detach().cpu().numpy())
+        dep_preds.append(deprel_scores.max(3)[1].detach().cpu().numpy())
+        return [predicted_upos, predicted_xpos, predicted_feats, dep_preds] , [upos_scores, xpos_scores, feats_scores, deprel_scores]
+
     def preds_to_cpu(self, predictions):
         predicted_upos = predictions[0]
         predicted_xpos = predictions[1]
@@ -62,7 +94,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         predicted_upos = predicted_upos.data.cpu().numpy().tolist()
         predicted_xpos = predicted_xpos.data.cpu().numpy().tolist()
         predicted_feats = predicted_feats.data.cpu().numpy().tolist()
-        return [predicted_upos, predicted_xpos, predicted_feats]
+        return predicted_upos, predicted_xpos, predicted_feats
 
     def deprel_to_deps(self, predicted_dep, batch):
         """Function wich transform the deprel into deps wich is an 
@@ -179,6 +211,10 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
             onmt_batch['deprel_idxs'] = batch.deprel_idxs
             onmt_batch['word_mask'] = batch.word_mask
         return onmt_batch
+    
+    def get_scores(self,batch, word_reprs, cls_reprs):
+        upos_scores = self._tagger.upos_ffn(word_reprs)
+
 
     def validation_metrics():
         return NotImplemented

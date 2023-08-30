@@ -129,6 +129,8 @@ class ModelSaver(ModelSaverBase):
             "opt": self.model_opt,
             "optim": self.optim.state_dict(),
             "config": model.encoder.xlmr.config, # get the XLMRConfig from trankit
+            "full_model": model,
+            "trankit": getattr(self.model_opt,'trankit')
         }
         # added for trankit
         if epoch > 1:

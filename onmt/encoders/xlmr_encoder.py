@@ -16,7 +16,8 @@ class XLMREncoder(enc.EncoderBase) :
     # TODO add mother class XLMRobertaAdapterModel to avoid having xlmr attribute
     def __init__(self, opt:dict, embeddings = None) -> None:
         super(XLMREncoder, self).__init__()
-        self._adapter_name = opt.task+'_'+opt.treebank_name
+        # self._adapter_name = opt.task+'_'+opt.treebank_name
+        self._adapter_name = opt.task+opt.treebank_name # TODO choose if _ or not
         # xlmr encoder
         self.xlmr_dim = 768 if opt.embedding_name == 'xlm-roberta-base' else 1024
         self.xlmr = XLMRobertaAdapterModel.from_pretrained(opt.embedding_name,
@@ -42,16 +43,24 @@ class XLMREncoder(enc.EncoderBase) :
         for layer in self.xlmr :
             layer.update_dropout(dropout, attention_dropout)
 
-    def forward(self, src:Batch):
+    def forward(self, src:Batch, src_len = None):
         # encoding by embedding
+        if src_len is None :
+            src_len = src.word_lens
         word_reprs, cls_reprs = self.encode_words(
             piece_idxs= src.piece_idxs,
             attention_masks= src.attention_masks,
-            word_lens= src.word_lens
+            word_lens= src_len
             )
         return word_reprs, cls_reprs
 
     def encode_words(self, piece_idxs:Tensor, attention_masks:Tensor, word_lens:Tensor):
+        if not isinstance(piece_idxs, Tensor):
+            piece_idxs = torch.tensor(piece_idxs)
+        if not isinstance(attention_masks, Tensor):
+            attention_masks = torch.tensor(attention_masks)
+        if not isinstance(word_lens, Tensor):
+            word_lens = torch.tensor(word_lens)
         batch_size, _ = piece_idxs.size()
         all_xlmr_outputs = self.xlmr(piece_idxs, attention_mask=attention_masks)
         xlmr_outputs = all_xlmr_outputs[0] # [batch_size, word_lens, xlmr_dim]

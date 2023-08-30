@@ -256,7 +256,7 @@ def main(opt, device_id):
         valid_iter=valid_iter,
         valid_steps=opt.valid_steps,
         trankit = opt.trankit,
-        epoch=opt.epoch
+        epoch=opt.max_epoch
     )
 
     if trainer.report_manager.tensorboard_writer is not None:

@@ -8,32 +8,6 @@ import numpy as np
 import os
 from copy import deepcopy
 
-
-class TConfig():
-    """Training Config adapted from trankit with elements needed for building model"""
-    def __init__(self, opt) -> None:
-            self.category =  'customized'
-            self.task =  opt.task
-            self.save_dir =  opt.save_data
-            self._save_dir = opt.save_data
-            self.gpu =   use_gpu(opt)
-            self.max_epoch =  opt.train_steps
-            self.train_conllu_fpath =  opt.data['corpus_1']['path_tgt']
-            self.dev_conllu_fpath =  opt.data['valid']['path_tgt']
-            self.batch_size =  opt.batch_size
-            self.treebank_name = opt.treebank_name
-
-    def get_default_tconfig(self):
-        return {'category': self.category, # pipeline category
-                'task': self.task, # task name
-                'save_dir': self.save_dir, # directory for saving trained model
-                'gpu' : self.gpu,
-                'max_epoch': self.max_epoch,
-                'train_conllu_fpath': self.train_conllu_fpath, # annotations file in CONLLU format  for training
-                'dev_conllu_fpath': self.dev_conllu_fpath, # annotations file in CONLLU format for development
-                'batch_size': self.batch_size,
-            }
-
 class RandomShuffler(object):
     """Use random functions while keeping track of the random state to make it
     reproducible and deterministic.
