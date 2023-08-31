@@ -23,7 +23,7 @@ from .utils.misc import set_random_seed
 from .trainer import build_trainer
 from .models import build_model_saver
 from .modules.embeddings import prepare_pretrained_embeddings
-from .utils.misc import TConfig
+from onmt.utils.trankit_utils import TConfig
 
 def prepare_transforms_vocabs(opt):
     """Prepare or dump transforms before training."""

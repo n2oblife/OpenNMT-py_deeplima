@@ -43,7 +43,7 @@ class XLMREncoder(enc.EncoderBase) :
         for layer in self.xlmr :
             layer.update_dropout(dropout, attention_dropout)
 
-    def forward(self, src:Batch, src_len = None):
+    def forward(self, src:Batch, src_len:list[list[int]] = None):
         # encoding by embedding
         if src_len is None :
             src_len = src.word_lens
@@ -59,8 +59,8 @@ class XLMREncoder(enc.EncoderBase) :
             piece_idxs = torch.tensor(piece_idxs)
         if not isinstance(attention_masks, Tensor):
             attention_masks = torch.tensor(attention_masks)
-        if not isinstance(word_lens, Tensor):
-            word_lens = torch.tensor(word_lens)
+        # if not isinstance(word_lens, Tensor):
+        #     word_lens = torch.tensor(word_lens)
         batch_size, _ = piece_idxs.size()
         all_xlmr_outputs = self.xlmr(piece_idxs, attention_mask=attention_masks)
         xlmr_outputs = all_xlmr_outputs[0] # [batch_size, word_lens, xlmr_dim]

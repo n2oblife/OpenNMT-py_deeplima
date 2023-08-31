@@ -237,6 +237,7 @@ def _add_dynamic_corpus_opts(parser, build_vocab_only=False):
         "-task",
         "--task",
         type=str,
+        default='posdep',
         help="Task to use for the Trankit's training.",
     )
     group.add(
@@ -260,8 +261,8 @@ def _add_dynamic_corpus_opts(parser, build_vocab_only=False):
         help="It triggers the launch of the trankit's training"
         )
     group.add(
-        "-epoch",
-        "--epoch",
+        "-max-epoch",
+        "--max-epoch",
         type=int,
         default=1,
         help="The number of epoch for the training"

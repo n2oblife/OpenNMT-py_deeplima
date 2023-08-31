@@ -20,14 +20,19 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         # TODO
         # trankit's config for TPipeline, parameters are : self._param
         # can be optimized by init only posdep and useful elements
-        TPipeline.__init__(self, training_config=TConfig(opt).get_default_tconfig())
+        # TPipeline.__init__(self, training_config=TConfig(opt).get_default_tconfig())
         # tconfig = TConfig(opt)
         # self.posdep = PosDepClassifier(tconfig) # should optimize the init time
         # or could create a new class adapted from trankit's PosDepClassifier 
         self.embeddings = embeddings # see if needed or overwrite trankit's embeddings
         
         # TODO next optimization (still long to load), it is the classifier
-        # self._tagger = copy.deepcopy(TPipeline(training_config=TConfig(opt))._tagger)
+        t_pipeline = TPipeline(training_config=TConfig(opt).get_config())
+        self._tagger = copy.deepcopy(t_pipeline._tagger)
+        self._config = t_pipeline._config
+        self.train_set = t_pipeline.train_set
+        self.dev_set = t_pipeline.dev_set
+        del t_pipeline
     
     @classmethod
     def from_opt(cls, opt, embeddings, attentional=True):
@@ -94,7 +99,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         predicted_upos = predicted_upos.data.cpu().numpy().tolist()
         predicted_xpos = predicted_xpos.data.cpu().numpy().tolist()
         predicted_feats = predicted_feats.data.cpu().numpy().tolist()
-        return predicted_upos, predicted_xpos, predicted_feats
+        return [predicted_upos, predicted_xpos, predicted_feats]
 
     def deprel_to_deps(self, predicted_dep, batch):
         """Function wich transform the deprel into deps wich is an 

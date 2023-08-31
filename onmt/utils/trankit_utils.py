@@ -36,8 +36,6 @@ ALREADY_CONFIGURED_TRAIN = ['save_data',
                       'save_data', 
                       'data',
                       'gpu_ranks',
-                      'task',
-                      'treebank'
                       ]
 
 class TConfig():
@@ -49,7 +47,7 @@ class TConfig():
             self._save_dir = opt.save_data
             self.train_conllu_fpath =  opt.data['corpus_1']['path_tgt']
             self.dev_conllu_fpath =  opt.data['valid']['path_tgt']
-            self.adapter_,name = opt.task + opt.treebank
+            self.adapter_name = opt.task + opt.treebank_name
             self.load_opt(opt)
     
     def load_opt(self, opt)-> None:
@@ -118,7 +116,7 @@ def posdep(opt, state_dic, t_opt):
 
     dict_output = posdep_doc(in_doc=opt.src, opt=opt, _config=_config)
     write_output(opt, dict_output)
-    # dict_output = {TEXT: text, SENTENCES: sents, SCORES : score, LANG: t_opt.treebank}
+    # dict_output = {TEXT: text, SENTENCES: sents, SCORES : score, LANG: t_opt.treebank_name}
 
 def file_loader(text_path):
     for line in open(text_path, "r"):
@@ -127,6 +125,15 @@ def file_loader(text_path):
 def write_output(opt, dict_output, file): 
     with open(opt.output, "w") as f:
         file.write(dict_output)
+
+def load_model(opt):
+    load_test_model = (
+        onmt.decoders.ensemble.load_test_model
+        if len(opt.models) > 1
+        else onmt.model_builder.load_test_model
+    )
+    _, model, _ = load_test_model(opt) # = vocabs, model, model_opt 
+    return model
 
 def posdep_doc(in_doc, opt, _config):  # assuming input is a document 
     dposdep_doc = deepcopy(in_doc)
@@ -148,12 +155,7 @@ def posdep_doc(in_doc, opt, _config):  # assuming input is a document
     if config.embedding_name == 'xlm-roberta-large':
         eval_batch_size = int(eval_batch_size / 3)
 
-    load_test_model = (
-        onmt.decoders.ensemble.load_test_model
-        if len(opt.models) > 1
-        else onmt.model_builder.load_test_model
-    )
-    _, model, _ = load_test_model(opt)
+    model = load_model(opt)
 
     for batch in DataLoader(test_set,
                             batch_size=eval_batch_size,
