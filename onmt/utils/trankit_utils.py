@@ -44,7 +44,7 @@ class TConfig():
             self.category =  'customized'
             self.gpu =   use_gpu(opt)
             self.save_dir =  opt.save_data
-            self._save_dir = opt.save_data
+            self._save_dir = opt.save_data # considered cache
             self.train_conllu_fpath =  opt.data['corpus_1']['path_tgt']
             self.dev_conllu_fpath =  opt.data['valid']['path_tgt']
             self.adapter_name = opt.task + opt.treebank_name
@@ -108,8 +108,8 @@ def infer_trankit_model(opt, state_dic, t_opt):
         raise NotImplementedError
 
 def posdep(opt, state_dic, t_opt): 
-    _config = TConfig(t_opt)
-    # _config = state_dic['config']
+    # _config = TConfig(t_opt)
+    _config = state_dic['config']
     word_splitter = XLMRobertaTokenizer.from_pretrained(t_opt.embedding_name)
     text_gen = (row for row in open(opt.src, "r"))
     sents = []
@@ -135,10 +135,36 @@ def load_model(opt):
     _, model, _ = load_test_model(opt) # = vocabs, model, model_opt 
     return model
 
-def posdep_doc(in_doc, opt, _config):  # assuming input is a document 
+def save_vocab_json(config) :
+    """_summary_
+
+    Args:
+        config (_type_): _description_
+    """
+    path = config.vocabs_fpath
+    if not os.path.exists(path):
+        js = open(path, "w")
+        voc = open()
+        js.write()
+
+def adapt_config(config):
+    """adapt the config for inference"""
+    # TODO save the vocab in .json format, check result with cache for training
+    breakpoint()
+    # save_vocab_json(config) 
+    # config.treebank_name = lang2treebank[config.treebank_name]
+    config.training = False
+    return config
+
+def posdep_doc(in_doc, opt, _config):  # assuming input is a document
+    with open(in_doc, 'r') as f:
+        in_doc = f.read()
+        f.close()
+    # in_doc = open(in_doc, "r").read()
     dposdep_doc = deepcopy(in_doc)
     # load outputs of tokenizer
-    config = _config
+    breakpoint()
+    config = adapt_config(_config)
     wordpiece_splitter = XLMRobertaTokenizer.from_pretrained(config.embedding_name)
     test_set = TaggerDatasetLive(
         tokenized_doc=dposdep_doc,

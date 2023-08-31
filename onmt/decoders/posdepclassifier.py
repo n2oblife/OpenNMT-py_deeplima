@@ -28,6 +28,7 @@ class PosDepDecoder(dec.DecoderBase, TPipeline):
         
         # TODO next optimization (still long to load), it is the classifier
         t_pipeline = TPipeline(training_config=TConfig(opt).get_config())
+        # in the config the cache dir is same as save dir
         self._tagger = copy.deepcopy(t_pipeline._tagger)
         self._config = t_pipeline._config
         self.train_set = t_pipeline.train_set

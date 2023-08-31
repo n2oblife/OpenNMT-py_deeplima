@@ -128,7 +128,7 @@ class ModelSaver(ModelSaverBase):
             "vocab": vocabs_to_dict(self.vocabs),
             "opt": self.model_opt,
             "optim": self.optim.state_dict(),
-            "config": model.encoder.xlmr.config, # get the XLMRConfig from trankit
+            "config": model.decoder._config, # get the XLMRConfig from trankit
             "trankit": getattr(self.model_opt,'trankit')
         }
         # added for trankit

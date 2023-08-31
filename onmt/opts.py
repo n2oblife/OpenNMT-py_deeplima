@@ -251,7 +251,13 @@ def _add_dynamic_corpus_opts(parser, build_vocab_only=False):
         "-treebank_name",
         "--treebank_name",
         type=str,
-        help="used in the trankit's config, not relevant",
+        help="used in the trankit's config",
+    )
+    group.add(
+        "-lang",
+        "--lang",
+        type=str,
+        help="used in the trankit's config",
     )
     group.add(
         "-trankit",
