@@ -109,7 +109,7 @@ def infer_trankit_model(opt, state_dic, t_opt):
 
 def posdep(opt, state_dic, t_opt): 
     # _config = TConfig(t_opt)
-    _config = state_dic['config']
+    _config = state_dic['trankit_config']
     word_splitter = XLMRobertaTokenizer.from_pretrained(t_opt.embedding_name)
     text_gen = (row for row in open(opt.src, "r"))
     sents = []
@@ -117,10 +117,6 @@ def posdep(opt, state_dic, t_opt):
     dict_output = posdep_doc(in_doc=opt.src, opt=opt, _config=_config)
     write_output(opt, dict_output)
     # dict_output = {TEXT: text, SENTENCES: sents, SCORES : score, LANG: t_opt.treebank_name}
-
-def file_loader(text_path):
-    for line in open(text_path, "r"):
-        yield line
 
 def write_output(opt, dict_output, file): 
     with open(opt.output, "w") as f:
@@ -135,26 +131,39 @@ def load_model(opt):
     _, model, _ = load_test_model(opt) # = vocabs, model, model_opt 
     return model
 
-def save_vocab_json(config) :
+def download_vocab(config) :
     """_summary_
 
     Args:
         config (_type_): _description_
     """
-    path = config.vocabs_fpath
-    if not os.path.exists(path):
-        js = open(path, "w")
-        voc = open()
-        js.write()
+    breakpoint()
+    lang = treebank2lang[config.treebank_name]
+    dir_path = os.path.join(config._cache_dir, config.embedding_name, lang, '')
+    down_voc_path = 
+    os.system("bash ")
 
 def adapt_config(config):
-    """adapt the config for inference"""
+    """Adapt the config for inference"""
     # TODO save the vocab in .json format, check result with cache for training
-    breakpoint()
     # save_vocab_json(config) 
     # config.treebank_name = lang2treebank[config.treebank_name]
     config.training = False
     return config
+
+def change_config_dataset(config):
+    """Changes some parameters of the config to use the right vocab file
+
+    Args:
+        config (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    _config = copy.coppy(config)
+    _config._cache_dir = # change the cache_dir, treebank, embedding_name to go to right vocab file
+
+    return _config
 
 def posdep_doc(in_doc, opt, _config):  # assuming input is a document
     with open(in_doc, 'r') as f:
@@ -162,27 +171,32 @@ def posdep_doc(in_doc, opt, _config):  # assuming input is a document
         f.close()
     # in_doc = open(in_doc, "r").read()
     dposdep_doc = deepcopy(in_doc)
-    # load outputs of tokenizer
-    breakpoint()
+    # load tokenizer because not trained
+    wordpiece_splitter = XLMRobertaTokenizer.from_pretrained(_config.embedding_name)
+
     config = adapt_config(_config)
-    wordpiece_splitter = XLMRobertaTokenizer.from_pretrained(config.embedding_name)
+    dataset_config = change_config_dataset(config)
     test_set = TaggerDatasetLive(
         tokenized_doc=dposdep_doc,
         wordpiece_splitter=wordpiece_splitter,
-        config=config
+        config=dataset_config
     )
     test_set.numberize()
 
-    # load weights of tagger into the combined model
-    # self._load_adapter_weights(model_name='tagger')
-
-    # make predictions
-    eval_batch_size = tbname2tagbatchsize.get(_config.treebank_name, config.batch_size)
-    if config.embedding_name == 'xlm-roberta-large':
-        eval_batch_size = int(eval_batch_size / 3)
-
     model = load_model(opt)
 
+    # make predictions
+    tagged_doc = posdep_prediction(model, config, test_set, dposdep_doc)
+    torch.cuda.empty_cache()
+    return tagged_doc
+
+def posdep_prediction(model, opt, config, test_set, dposdep_doc):
+    # set batch size
+    eval_batch_size = tbname2tagbatchsize.get(config.treebank_name, config.batch_size)
+    if config.embedding_name == 'xlm-roberta-large':
+        eval_batch_size = int(eval_batch_size / 3)
+    
+    # make prediction
     for batch in DataLoader(test_set,
                             batch_size=eval_batch_size,
                             shuffle=False, collate_fn=test_set.collate_fn):
@@ -221,8 +235,6 @@ def posdep_doc(in_doc, opt, _config):  # assuming input is a document
 
                 #scores
                 test_set.conllu_doc[sentid][wordid][SCORES] = scores[bid][i]
-        f.write(test_set.conllu_doc)
-    f.close()
-    tagged_doc = get_output_doc(dposdep_doc, test_set.conllu_doc)
-    torch.cuda.empty_cache()
-    return tagged_doc
+            f.write(test_set.conllu_doc)
+        f.close()
+    return get_output_doc(dposdep_doc, test_set.conllu_doc)

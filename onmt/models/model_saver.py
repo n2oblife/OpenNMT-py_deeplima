@@ -45,7 +45,7 @@ class ModelSaverBase(object):
         if keep_checkpoint > 0:
             self.checkpoint_queue = deque([], maxlen=keep_checkpoint)
 
-    def save(self, step, moving_average=None, epoch = 1):
+    def save(self, step, moving_average=None):
         """Main entry point for model saver
 
         It wraps the `_save` method with checks and apply `keep_checkpoint`
@@ -62,7 +62,7 @@ class ModelSaverBase(object):
                 model_params_data.append(param.data)
                 param.data = avg.data
 
-        chkpt, chkpt_name = self._save(step, save_model, epoch)
+        chkpt, chkpt_name = self._save(step, save_model)
         self.last_saved_step = step
 
         if moving_average:
@@ -75,7 +75,7 @@ class ModelSaverBase(object):
                 self._rm_checkpoint(todel)
             self.checkpoint_queue.append(chkpt_name)
 
-    def _save(self, step, model, epoch):
+    def _save(self, step, model):
         """Save a resumable checkpoint.
 
         Args:
@@ -105,8 +105,7 @@ class ModelSaverBase(object):
 class ModelSaver(ModelSaverBase):
     """Simple model saver to filesystem"""
 
-    # epoch added for trankit's training
-    def _save(self, step, model, epoch = 1):
+    def _save(self, step, model):
         if (
             hasattr(self.model_opt, "lora_layers")
             and len(self.model_opt.lora_layers) > 0
@@ -128,14 +127,16 @@ class ModelSaver(ModelSaverBase):
             "vocab": vocabs_to_dict(self.vocabs),
             "opt": self.model_opt,
             "optim": self.optim.state_dict(),
-            "config": model.decoder._config, # get the XLMRConfig from trankit
-            "trankit": getattr(self.model_opt,'trankit')
         }
+        
         # added for trankit
-        if epoch > 1:
-            self.base_path+=f'_epoch_{epoch}'
+        if self.model_opt.trankit:
+            checkpoint['config'] = model.encoder.xlmr.config # get the XLMRConfig from trankit
+            checkpoint['trankit_config'] = model.decoder._config # get the trankit config
+            step -= 1
+            if checkpoint['opt'].max_epoch > 1:
+                self.base_path+=f"_epoch_{checkpoint['opt'].max_epoch}"
 
-        #TODO correct the path to the model
         logger.info("Saving checkpoint %s_step_%d.pt" % (self.base_path, step))
         checkpoint_path = "%s_step_%d.pt" % (self.base_path, step)
         torch.save(checkpoint, checkpoint_path)

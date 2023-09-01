@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# dir of the actual script
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 # Default values
 TRAIN="."
 DEV="."
@@ -86,7 +89,7 @@ done
 
 
 # building the dataset based on the paths given
-python build_dataset.py -t $TRAIN -d $DEV -c $CONFIG -f $FIELDS -w $WRITE -u $USE || exit
+python "$SCRIPT_DIR/build_dataset.py -t $TRAIN -d $DEV -c $CONFIG -f $FIELDS -w $WRITE -u $USE" || exit
 
 # building the vocab based on the path given on the config file
 echo "INFO - BUILDING VOCAB"
@@ -98,3 +101,9 @@ if [ $BUILD -eq "false" ]; then
   echo "INFO - TRAINING MODEL"
   onmt_train -config $CONFIG 
 fi
+
+# enable the scripts to be launched
+export PATH="$SCRIPT_DIR:$PATH"
+chmod u+x "$SCRIPT_DIR/download_trankit_vocab.sh"
+
+exit 0

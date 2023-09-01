@@ -141,11 +141,11 @@ if __name__=='__main__':
             if train_path!='.':
                 config_file["data"]["corpus_1"]["path_src"] = train_path[:-7] +'_src_onmt.txt'
                 config_file["data"]["corpus_1"]["path_tgt"] = train_path
-                config_file["src_vocab"] = train_path[:-4] +'.vocab.txt'
+                config_file["src_vocab"] = train_path[:-7] +'.vocab.txt'
             if dev_path!='.':
                 config_file["data"]["valid"]["path_src"] = dev_path[:-7] +'_src_onmt.txt'
                 config_file["data"]["valid"]["path_tgt"] = dev_path
-                config_file["tgt_vocab"] = dev_path[:-4] +'.vocab.txt'
+                config_file["tgt_vocab"] = dev_path[:-7] +'.vocab.txt'
             with open(config_path, 'w') as f:
                 logging.info("CONFIG UPDATED")
                 yaml.dump(config_file, f)

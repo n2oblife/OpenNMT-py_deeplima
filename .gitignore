@@ -116,6 +116,7 @@ runs/
 
 # cache from trankit
 cache/
+data/trankit_voc/
 
 # files from the tuto
 docs/source/examples/wmt17_en_de/ 

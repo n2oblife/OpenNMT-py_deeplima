@@ -34,7 +34,7 @@ To disable the training in this script :
 bash onmt_training.sh --train <path/to/training/set.conllu> --dev <path/to/validation/set.conllu> --fields <task> --config <path/to/config/file.yaml> --build <bool>
 ```
 
-This script will both prepare the dataset and launch the training according to the config file. There is an example of a config file with comments to help build it from scratch.
+This script will both prepare the dataset and launch the training according to the config file. It will also enable to launch the script to download the vocab for trankit. There is an example of a config file with comments to help build it from scratch.
 
 ## Training
 

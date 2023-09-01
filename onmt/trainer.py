@@ -397,8 +397,7 @@ class Trainer(object):
             progress.close()
             print(f"step : {step}")
         if self.model_saver is not None:
-            self.model_saver.save(step, moving_average=self.moving_average,
-                                  epoch=epoch)
+            self.model_saver.save(step, moving_average=self.moving_average)
         return total_stats
 
     def validate(self, valid_iter, moving_average=None, trankit=False):
