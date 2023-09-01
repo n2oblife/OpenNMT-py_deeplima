@@ -75,6 +75,21 @@ class XLMREncoder(enc.EncoderBase) :
         xlmr_outputs = xlmr_outputs.view(batch_size, token_num, token_len, self.xlmr_dim)
         xlmr_outputs = xlmr_outputs.sum(2)
         return xlmr_outputs, cls_reprs
+
+    def get_tokenizer_inputs(self, batch):
+        wordpiece_reprs = self.encode(
+            piece_idxs=batch.piece_idxs,
+            attention_masks=batch.attention_masks
+        )
+        return wordpiece_reprs
+    
+    def encode(self, piece_idxs, attention_masks):
+        batch_size, _ = piece_idxs.size()
+        all_xlmr_outputs = self.xlmr(piece_idxs, attention_mask=attention_masks)
+        xlmr_outputs = all_xlmr_outputs[0]
+
+        wordpiece_reprs = xlmr_outputs[:, 1:-1, :]  # [batch size, max input length - 2, xlmr dim]
+        return wordpiece_reprs
         
     def batch_iterator(train_set):
         """_summary_

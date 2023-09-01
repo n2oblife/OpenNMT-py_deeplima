@@ -24,8 +24,8 @@ handle_error(){
 }
 
 # Options
-SHORT=l:,h
-LONG=langue:,help
+SHORT=l:,d:,h
+LONG=langue:,directory:,help
 OPTS=$(getopt -a -n onmt_training --options $SHORT --longoptions $LONG -- "$@")
 
 VALID_ARGUMENTS=$# # Returns the count of arguments that are in short or long options

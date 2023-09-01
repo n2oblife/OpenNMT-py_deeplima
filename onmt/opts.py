@@ -257,6 +257,14 @@ def _add_dynamic_corpus_opts(parser, build_vocab_only=False):
         "-lang",
         "--lang",
         type=str,
+        default='english',
+        help="used in the trankit's config",
+    )
+    group.add(
+        "-category",
+        "--category",
+        type=str,
+        default='english',
         help="used in the trankit's config",
     )
     group.add(
