@@ -5,7 +5,6 @@ subsequent transformer based architectures
 
 import torch
 import torch.nn as nn
-
 from onmt.decoders.decoder import DecoderBase
 from onmt.modules import MultiHeadedAttention, AverageAttention
 from onmt.modules.position_ffn import PositionwiseFeedForward
@@ -29,7 +28,12 @@ class TransformerDecoderLayerBase(nn.Module):
         alignment_heads=0,
         pos_ffn_activation_fn=ActivationFunction.relu,
         add_qkvbias=False,
+        num_kv=0,
+        add_ffnbias=True,
+        parallel_residual=False,
+        shared_layer_norm=False,
         layer_norm="standard",
+        use_ckpting=[],
     ):
         """
         Args:
@@ -71,6 +75,8 @@ class TransformerDecoderLayerBase(nn.Module):
                 max_relative_positions=max_relative_positions,
                 attn_type="self",
                 add_qkvbias=add_qkvbias,
+                num_kv=num_kv,
+                use_ckpting=use_ckpting,
             )
         elif self_attn_type == "average":
             self.self_attn = AverageAttention(
@@ -78,15 +84,29 @@ class TransformerDecoderLayerBase(nn.Module):
             )
 
         self.feed_forward = PositionwiseFeedForward(
-            d_model, d_ff, dropout, pos_ffn_activation_fn, layer_norm
+            d_model,
+            d_ff,
+            dropout,
+            pos_ffn_activation_fn,
+            add_ffnbias,
+            parallel_residual,
+            layer_norm,
+            use_ckpting=use_ckpting,
         )
+        self.parallel_residual = parallel_residual
+        self.shared_layer_norm = shared_layer_norm
         if layer_norm == "standard":
             self.layer_norm_1 = nn.LayerNorm(d_model, eps=1e-6)
+            if parallel_residual and not shared_layer_norm:
+                self.layer_norm_res = nn.LayerNorm(d_model, eps=1e-6)
         elif layer_norm == "rms":
             self.layer_norm_1 = RMSNorm(d_model, eps=1e-6)
+            if parallel_residual and not shared_layer_norm:
+                self.layer_norm_res = RMSNorm(d_model, eps=1e-6)
         else:
             raise ValueError(f"{layer_norm} layer norm type is not supported")
-        self.drop = nn.Dropout(dropout)
+
+        self.dropout = nn.Dropout(dropout)
         self.full_context_alignment = full_context_alignment
         self.alignment_heads = alignment_heads
 
@@ -128,7 +148,7 @@ class TransformerDecoderLayerBase(nn.Module):
     def update_dropout(self, dropout, attention_dropout):
         self.self_attn.update_dropout(attention_dropout)
         self.feed_forward.update_dropout(dropout)
-        self.drop.p = dropout
+        self.dropout.p = dropout
 
     def _forward(self, *args, **kwargs):
         raise NotImplementedError
@@ -152,13 +172,13 @@ class TransformerDecoderLayerBase(nn.Module):
             dec_mask = tgt_pad_mask
         return dec_mask
 
-    def _forward_self_attn(self, layer_in_norm, dec_mask, step):
+    def _forward_self_attn(self, norm_layer_in, dec_mask, step):
         if self.self_attn_type == "scaled-dot":
             return self.self_attn(
-                layer_in_norm, layer_in_norm, layer_in_norm, mask=dec_mask, step=step
+                norm_layer_in, norm_layer_in, norm_layer_in, mask=dec_mask, step=step
             )
         elif self.self_attn_type == "average":
-            return self.self_attn(layer_in_norm, mask=dec_mask, step=step)
+            return self.self_attn(norm_layer_in, mask=dec_mask, step=step)
         else:
             raise ValueError(f"self attention {type(self.self_attn)} not supported")
 
@@ -186,7 +206,12 @@ class TransformerDecoderLayer(TransformerDecoderLayerBase):
         alignment_heads=0,
         pos_ffn_activation_fn=ActivationFunction.relu,
         add_qkvbias=False,
+        num_kv=0,
+        add_ffnbias=True,
+        parallel_residual=False,
+        shared_layer_norm=False,
         layer_norm="standard",
+        use_ckpting=[],
     ):
         """
         Args:
@@ -205,7 +230,12 @@ class TransformerDecoderLayer(TransformerDecoderLayerBase):
             alignment_heads,
             pos_ffn_activation_fn=pos_ffn_activation_fn,
             add_qkvbias=add_qkvbias,
+            num_kv=num_kv,
+            add_ffnbias=add_ffnbias,
+            parallel_residual=parallel_residual,
+            shared_layer_norm=shared_layer_norm,
             layer_norm=layer_norm,
+            use_ckpting=use_ckpting,
         )
         self.context_attn = MultiHeadedAttention(
             heads,
@@ -213,6 +243,8 @@ class TransformerDecoderLayer(TransformerDecoderLayerBase):
             dropout=attention_dropout,
             attn_type="context",
             add_qkvbias=add_qkvbias,
+            num_kv=num_kv,
+            use_ckpting=use_ckpting,
         )
         if layer_norm == "standard":
             self.layer_norm_2 = nn.LayerNorm(d_model, eps=1e-6)
@@ -265,16 +297,29 @@ class TransformerDecoderLayer(TransformerDecoderLayerBase):
             # mask now are (batch x 1 x tlen x s or t len)
             # 1 = heads to be expanded in MHA
 
-        layer_in_norm = self.layer_norm_1(layer_in)
+        norm_layer_in = self.layer_norm_1(layer_in)
 
-        query, _ = self._forward_self_attn(layer_in_norm, dec_mask, step)
+        self_attn, _ = self._forward_self_attn(norm_layer_in, dec_mask, step)
 
-        query = self.drop(query) + layer_in
-
-        query_norm = self.layer_norm_2(query)
-
-        mid, attns = self.context_attn(enc_out, enc_out, query_norm, mask=src_pad_mask)
-        layer_out = self.feed_forward(self.drop(mid) + query)
+        if self.parallel_residual:
+            ctx_attn, attns = self.context_attn(
+                enc_out, enc_out, norm_layer_in, mask=src_pad_mask
+            )
+            # feed_forward applies residual, so we remove and apply residual with un-normed
+            layer_out = (
+                self.feed_forward(norm_layer_in)
+                - norm_layer_in
+                + layer_in
+                + self.dropout(self_attn)
+                + ctx_attn
+            )
+        else:
+            query = self.dropout(self_attn) + layer_in
+            norm_query = self.layer_norm_2(query)
+            ctx_attn, attns = self.context_attn(
+                enc_out, enc_out, norm_query, mask=src_pad_mask
+            )
+            layer_out = self.feed_forward(self.dropout(ctx_attn) + query)
 
         return layer_out, attns
 
@@ -323,7 +368,12 @@ class TransformerDecoderBase(DecoderBase):
             alignment_heads=opt.alignment_heads,
             pos_ffn_activation_fn=opt.pos_ffn_activation_fn,
             add_qkvbias=opt.add_qkvbias,
+            num_kv=opt.num_kv,
+            add_ffnbias=opt.add_ffnbias,
+            parallel_residual=opt.parallel_residual,
+            shared_layer_norm=opt.shared_layer_norm,
             layer_norm=opt.layer_norm,
+            use_ckpting=opt.use_ckpting,
         )
 
     def init_state(self, src, enc_out, enc_final_hs):
@@ -406,7 +456,12 @@ class TransformerDecoder(TransformerDecoderBase):
         alignment_heads,
         pos_ffn_activation_fn=ActivationFunction.relu,
         add_qkvbias=False,
+        num_kv=0,
+        add_ffnbias=True,
+        parallel_residual=False,
+        shared_layer_norm=False,
         layer_norm="standard",
+        use_ckpting=[],
     ):
         super(TransformerDecoder, self).__init__(
             d_model, copy_attn, embeddings, alignment_layer, layer_norm
@@ -427,7 +482,12 @@ class TransformerDecoder(TransformerDecoderBase):
                     alignment_heads=alignment_heads,
                     pos_ffn_activation_fn=pos_ffn_activation_fn,
                     add_qkvbias=add_qkvbias,
+                    num_kv=num_kv,
+                    add_ffnbias=add_ffnbias,
+                    parallel_residual=parallel_residual,
+                    shared_layer_norm=shared_layer_norm,
                     layer_norm=layer_norm,
+                    use_ckpting=use_ckpting,
                 )
                 for i in range(num_layers)
             ]
@@ -461,8 +521,6 @@ class TransformerDecoder(TransformerDecoderBase):
                     {"keys": torch.tensor([]), "values": torch.tensor([])},
                 )
 
-        tgt_words = tgt[:, :, 0]
-
         emb = self.embeddings(tgt, step=step)
         dec_out = emb
         assert emb.dim() == 3  # len x batch x embedding_dim
@@ -472,7 +530,7 @@ class TransformerDecoder(TransformerDecoderBase):
         src_max_len = self.state["src"].shape[1]
         src_pad_mask = ~sequence_mask(src_lens, src_max_len)  # [B x slen]
         src_pad_mask = src_pad_mask.unsqueeze(1)  # [B x 1 x slen]
-        tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
+        tgt_pad_mask = tgt[:, :, 0].eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
 
         with_align = kwargs.pop("with_align", False)
         attn_aligns = []
@@ -566,13 +624,23 @@ class TransformerLMDecoderLayer(TransformerDecoderLayerBase):
             # mask now are (batch x 1 x tlen x tlen)
             # 1 = heads to be expanded in MHA
 
-        layer_in_norm = self.layer_norm_1(layer_in)
+        norm_layer_in = self.layer_norm_1(layer_in)
 
-        query, attns = self._forward_self_attn(layer_in_norm, dec_mask, step)
+        attn_output, attns = self._forward_self_attn(norm_layer_in, dec_mask, step)
 
-        layer_out = self.drop(query) + layer_in
-
-        layer_out = self.feed_forward(layer_out)
+        if self.parallel_residual:
+            # feed_forward applies residual, so we remove and apply residual with un-normed
+            if not self.shared_layer_norm:
+                norm_res_layer_in = self.layer_norm_res(layer_in)
+                ff_in = norm_res_layer_in
+            else:
+                ff_in = norm_layer_in
+            layer_out = (
+                self.feed_forward(ff_in) - ff_in + layer_in + self.dropout(attn_output)
+            )
+        else:
+            layer_out = self.dropout(attn_output) + layer_in
+            layer_out = self.feed_forward(layer_out)
 
         return layer_out, attns
 
@@ -614,7 +682,12 @@ class TransformerLMDecoder(TransformerDecoderBase):
         alignment_heads=None,
         pos_ffn_activation_fn=ActivationFunction.relu,
         add_qkvbias=False,
+        num_kv=0,
+        add_ffnbias=True,
+        parallel_residual=False,
+        shared_layer_norm=False,
         layer_norm="standard",
+        use_ckpting=[],
     ):
         super(TransformerLMDecoder, self).__init__(
             d_model, copy_attn, embeddings, alignment_layer, layer_norm
@@ -634,7 +707,12 @@ class TransformerLMDecoder(TransformerDecoderBase):
                     alignment_heads=None,
                     pos_ffn_activation_fn=pos_ffn_activation_fn,
                     add_qkvbias=add_qkvbias,
+                    num_kv=num_kv,
+                    add_ffnbias=add_ffnbias,
+                    parallel_residual=parallel_residual,
+                    shared_layer_norm=shared_layer_norm,
                     layer_norm=layer_norm,
+                    use_ckpting=use_ckpting,
                 )
                 for i in range(num_layers)
             ]
@@ -657,14 +735,12 @@ class TransformerLMDecoder(TransformerDecoderBase):
                     {"keys": torch.tensor([]), "values": torch.tensor([])},
                 )
 
-        tgt_words = tgt[:, :, 0]
-
         dec_out = self.embeddings(tgt, step=step)
 
         assert dec_out.dim() == 3  # batch x len x embedding_dim
 
         pad_idx = self.embeddings.word_padding_idx
-        tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
+        tgt_pad_mask = tgt[:, :, 0].eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
 
         with_align = kwargs.pop("with_align", False)
         assert not with_align, "TransformerLMDecoder does not support align"

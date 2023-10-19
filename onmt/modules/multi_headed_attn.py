@@ -152,12 +152,13 @@ class MultiHeadedAttention(nn.Module):
         max_relative_positions: int = 0,
         attn_type: str = None,
         add_qkvbias=False,
+        num_kv=0,
+        use_ckpting=[],
     ) -> None:
         assert model_dim % head_count == 0
         self.dim_per_head = model_dim // head_count
         super(MultiHeadedAttention, self).__init__()
         self.head_count = head_count
-
         self.linear_keys = skip_init(
             nn.Linear, in_features=model_dim, out_features=model_dim, bias=add_qkvbias
         )
@@ -197,6 +198,8 @@ class MultiHeadedAttention(nn.Module):
 
             if max_relative_positions == -2:  # alibi positional bias
                 self.alibi = AlibiPositionalBias(head_count)
+
+        self.maybe_ckpt = checkpoint if "mha" in use_ckpting else lambda f, x: f(x)
 
     def update_dropout(self, dropout: float) -> None:
         self.dropout.p = dropout
@@ -275,9 +278,9 @@ class MultiHeadedAttention(nn.Module):
                 self.layer_cache[1]["keys"] = key
                 self.layer_cache[1]["values"] = value
         else:
-            key = self.linear_keys(key)
-            value = self.linear_values(value)
-            query = self.linear_query(query)
+            key = self.maybe_ckpt(self.linear_keys, key)
+            value = self.maybe_ckpt(self.linear_values, value)
+            query = self.maybe_ckpt(self.linear_query, query)
             key = shape(key, self.dim_per_head)
             value = shape(value, self.dim_per_head)
             query = shape(query, self.dim_per_head)
@@ -293,9 +296,14 @@ class MultiHeadedAttention(nn.Module):
                 query = query.transpose(1, 2)
                 key = key.transpose(1, 2)
         # 2) Calculate and scale scores.
-        query = query / math.sqrt(self.dim_per_head)
+        query /= math.sqrt(self.dim_per_head)
+        # expand key on heads dimension when it's less than query heads (multi-query variant)
+        key = key.view(key.size(0), -1, 1, key.size(2), key.size(3)).repeat(
+            1, 1, query.size(1) // key.size(1), 1, 1
+        )
+        key = key.view(key.size(0), query.size(1), key.size(3), key.size(4))
         # batch x num_heads x query_len x key_len
-        query_key = torch.matmul(query, key.transpose(2, 3))
+        scores = torch.matmul(query, key.transpose(2, 3))
 
         if self.relative_positions_embeddings is not None:
             key_len = key.size(2)
@@ -310,11 +318,9 @@ class MultiHeadedAttention(nn.Module):
             relations_keys = self.relative_positions_embeddings(
                 relative_positions_matrix
             )
-            scores = query_key + relative_matmul(query, relations_keys, True)
-        elif self.max_relative_positions == -2:
-            scores = self.alibi(query_key)
-        else:
-            scores = query_key
+            scores.add_(relative_matmul(query, relations_keys, True))
+        elif self.max_relative_positions == -2:  # Alibi
+            scores = self.alibi(scores)
 
         scores = scores.float()
 
@@ -327,18 +333,20 @@ class MultiHeadedAttention(nn.Module):
         # 3) Apply attention dropout and compute context vectors.
         attn = self.softmax(scores).to(query.dtype)
         drop_attn = self.dropout(attn)
-
+        # expand value on heads dimension when it's less than query heads (multi-query variant)
+        value = value.view(value.size(0), -1, 1, value.size(2), value.size(3)).repeat(
+            1, 1, query.size(1) // value.size(1), 1, 1
+        )
+        value = value.view(value.size(0), query.size(1), value.size(3), value.size(4))
         context_original = torch.matmul(drop_attn, value)
 
         if self.relative_positions_embeddings is not None:
             # We use the same embeddings for key and value
             relations_values = relations_keys
-            context = unshape(
-                context_original + relative_matmul(drop_attn, relations_values, False)
-            )
-        else:
-            context = unshape(context_original)
+            context_original.add_(relative_matmul(drop_attn, relations_values, False))
 
-        output = self.final_linear(context)
+        context = unshape(context_original)
 
-        return output, attn
+        attn_output = self.maybe_ckpt(self.final_linear, context)
+
+        return attn_output, attn

@@ -3,6 +3,7 @@
 
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 from onmt.modules.rmsnorm import RMSNorm
 from torch.nn.utils import skip_init
 
@@ -39,7 +40,10 @@ class PositionwiseFeedForward(nn.Module):
         d_ff,
         dropout=0.1,
         activation_fn=ActivationFunction.relu,
+        add_ffnbias=True,
+        parallel_residual=False,
         layer_norm="standard",
+        use_ckpting=[],
     ):
         super(PositionwiseFeedForward, self).__init__()
         self.w_1 = skip_init(
@@ -50,19 +54,22 @@ class PositionwiseFeedForward(nn.Module):
         )
         if layer_norm == "standard":
             self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
-        elif layer_norm == "rms":
+        elif layer_norm == "rms" and not parallel_residual:
             self.layer_norm = RMSNorm(d_model, eps=1e-6)
-        else:
+        elif not parallel_residual:
             raise ValueError(f"{layer_norm} layer norm type is not supported")
+        self.parallel_residual = parallel_residual
         self.dropout_1 = nn.Dropout(dropout)
         self.activation = ACTIVATION_FUNCTIONS[activation_fn]
         self.dropout_2 = nn.Dropout(dropout)
         if activation_fn == "silu":
             self.w_3 = skip_init(
                 nn.Linear, in_features=d_model, out_features=d_ff, bias=True
+
             )
         else:
             self.w_3 = None
+        self.maybe_ckpt = checkpoint if "ffn" in use_ckpting else lambda f, x: f(x)
 
     def forward(self, x):
         """Layer definition.
@@ -73,15 +80,18 @@ class PositionwiseFeedForward(nn.Module):
         Returns:
             (FloatTensor): Output ``(batch_size, input_len, model_dim)``.
         """
-        if self.w_3 is None:
-            inter = self.dropout_1(self.activation(self.w_1(self.layer_norm(x))))
+        if not self.parallel_residual:
+            norm_x = self.layer_norm(x)
         else:
-            inter = self.dropout_1(
-                self.activation(self.w_1(self.layer_norm(x)))
-                * self.w_3(self.layer_norm(x))
-            )
-        output = self.dropout_2(self.w_2(inter))
-        return output + x
+            norm_x = x
+        inter = self.maybe_ckpt(self.w_1, norm_x)
+        inter = self.activation(inter)
+        if self.w_3 is not None:
+            inter.mul_(self.maybe_ckpt(self.w_3, norm_x))
+        inter = self.dropout_1(inter)
+        inter = self.maybe_ckpt(self.w_2, inter)
+        inter = self.dropout_2(inter)
+        return inter + x
 
     def update_dropout(self, dropout):
         self.dropout_1.p = dropout

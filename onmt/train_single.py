@@ -25,10 +25,8 @@ from .models import build_model_saver
 from .modules.embeddings import prepare_pretrained_embeddings
 from onmt.utils.trankit_utils import TConfig
 
-def prepare_transforms_vocabs(opt):
+def prepare_transforms_vocabs(opt, transforms_cls):
     """Prepare or dump transforms before training."""
-    transforms_cls = get_transforms_cls(opt._all_transform)
-
     # if transform + options set in 'valid' we need to copy in main
     # transform / options for scoring considered as inference
     validset_transforms = opt.data.get("valid", {}).get("transforms", None)
@@ -66,18 +64,22 @@ def prepare_transforms_vocabs(opt):
         f"{vocabs_to_dict(vocabs)['src'][0:10]}"
     )
     logger.info(f"The decoder start token is: {opt.decoder_start_token}")
-    return vocabs, transforms_cls
+    return vocabs
 
 
 def _init_train(opt):
-    """Common initilization stuff for all training process."""
+    """Common initilization stuff for all training process.
+    We need to build or rebuild the vocab in 3 cases:
+    - training from scratch (train_from is false)
+    - resume training but transforms have changed
+    - resume training but vocab file has been modified
+    """
     ArgumentParser.validate_prepare_opts(opt)
-
+    transforms_cls = get_transforms_cls(opt._all_transform)
     if opt.train_from:
         # Load checkpoint if we resume from a previous training.
         checkpoint = load_checkpoint(ckpt_path=opt.train_from)
         vocabs = dict_to_vocabs(checkpoint["vocab"])
-        transforms_cls = get_transforms_cls(opt._all_transform)
         if (
             hasattr(checkpoint["opt"], "_all_transform")
             and len(
@@ -95,13 +97,13 @@ def _init_train(opt):
             if len(old_transf) != 0:
                 _msg += f" -{old_transf}."
             logger.warning(_msg)
-            vocabs, transforms_cls = prepare_transforms_vocabs(opt)
+            vocabs = prepare_transforms_vocabs(opt, transforms_cls)
         if opt.update_vocab:
             logger.info("Updating checkpoint vocabulary with new vocabulary")
-            vocabs, transforms_cls = prepare_transforms_vocabs(opt)
+            vocabs = prepare_transforms_vocabs(opt, transforms_cls)
     else:
         checkpoint = None
-        vocabs, transforms_cls = prepare_transforms_vocabs(opt)
+        vocabs = prepare_transforms_vocabs(opt, transforms_cls)
 
     return checkpoint, vocabs, transforms_cls
 
@@ -123,7 +125,7 @@ def _get_model_opts(opt, checkpoint=None):
             for arg in args:
                 if arg in model_args and getattr(opt, arg) != getattr(model_opt, arg):
                     logger.info(
-                        "Option: %s , value: %s overiding model: %s"
+                        "Option: %s , value: %s overriding model: %s"
                         % (arg, getattr(opt, arg), getattr(model_opt, arg))
                     )
             model_opt = opt
@@ -149,28 +151,6 @@ def _get_model_opts(opt, checkpoint=None):
     return model_opt
 
 
-def _build_valid_iter(opt, transforms_cls, vocabs):
-    """Build iterator used for validation."""
-    valid_iter = build_dynamic_dataset_iter(
-        opt, transforms_cls, vocabs, task=CorpusTask.VALID, copy=opt.copy_attn
-    )
-    return valid_iter
-
-
-def _build_train_iter(opt, transforms_cls, vocabs, stride=1, offset=0):
-    """Build training iterator."""
-    train_iter = build_dynamic_dataset_iter(
-        opt,
-        transforms_cls,
-        vocabs,
-        task=CorpusTask.TRAIN,
-        copy=opt.copy_attn,
-        stride=stride,
-        offset=offset,
-    )
-    return train_iter
-
-
 def main(opt, device_id):
     """Start training on `device_id`."""
     # NOTE: It's important that ``opt`` has been validated and updated
@@ -178,7 +158,6 @@ def main(opt, device_id):
 
     configure_process(opt, device_id)
     init_logger(opt.log_file)
-
     checkpoint, vocabs, transforms_cls = _init_train(opt)
     model_opt = _get_model_opts(opt, checkpoint=checkpoint)
 
@@ -186,6 +165,25 @@ def main(opt, device_id):
     model = build_model(model_opt, opt, vocabs, checkpoint)
 
     model.count_parameters(log=logger.info)
+    trainable = {
+        "torch.float32": 0,
+        "torch.float16": 0,
+        "torch.uint8": 0,
+        "torch.int8": 0,
+    }
+    non_trainable = {
+        "torch.float32": 0,
+        "torch.float16": 0,
+        "torch.uint8": 0,
+        "torch.int8": 0,
+    }
+    for n, p in model.named_parameters():
+        if p.requires_grad:
+            trainable[str(p.dtype)] += p.numel()
+        else:
+            non_trainable[str(p.dtype)] += p.numel()
+    logger.info("Trainable parameters = %s" % str(trainable))
+    logger.info("Non trainable parameters = %s" % str(non_trainable))
     logger.info(" * src vocab size = %d" % len(vocabs["src"]))
     logger.info(" * tgt vocab size = %d" % len(vocabs["tgt"]))
     if "src_feats" in vocabs:
@@ -194,6 +192,8 @@ def main(opt, device_id):
 
     # Build optimizer.
     optim = Optimizer.from_opt(model, opt, checkpoint=checkpoint)
+
+    del checkpoint
 
     # Build model saver
     model_saver = build_model_saver(model_opt, opt, model, vocabs, optim)
@@ -239,7 +239,6 @@ def main(opt, device_id):
         if valid_iter is not None:
             valid_iter = IterOnDevice(valid_iter, device_id)
         
-
     if len(opt.gpu_ranks):
         logger.info("Starting training on GPU: %s" % opt.gpu_ranks)
     else:

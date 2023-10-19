@@ -42,8 +42,6 @@ def build_trainer(opt, device_id, model, vocabs, optim, model_saver=None):
     validset_transforms = opt.data.get("valid", {}).get("transforms", None)
     if validset_transforms:
         scoring_preparator.warm_up(validset_transforms)
-    scorers_cls = get_scorers_cls(opt.train_metrics)
-    train_scorers = build_scorers(opt, scorers_cls)
     scorers_cls = get_scorers_cls(opt.valid_metrics)
     valid_scorers = build_scorers(opt, scorers_cls)
 
@@ -72,12 +70,11 @@ def build_trainer(opt, device_id, model, vocabs, optim, model_saver=None):
     )
 
     report_manager = onmt.utils.build_report_manager(opt, gpu_rank)
-    trainer = onmt.Trainer(
+    trainer = Trainer(
         model,
         train_loss,
         valid_loss,
         scoring_preparator,
-        train_scorers,
         valid_scorers,
         optim,
         trunc_size,
@@ -86,7 +83,6 @@ def build_trainer(opt, device_id, model, vocabs, optim, model_saver=None):
         accum_steps,
         n_gpu,
         gpu_rank,
-        opt.train_eval_steps,
         report_manager,
         with_align=True if opt.lambda_align > 0 else False,
         model_saver=model_saver if gpu_rank <= 0 else None,
@@ -112,9 +108,7 @@ class Trainer(object):
           training loss computation
         scoring_preparator(:obj:`onmt.translate.utils.ScoringPreparator`):
           preparator for the calculation of metrics via the
-          training_eval_handler method
-        train_scorers (dict): keeps in memory the current values
-          of the training metrics
+          _eval_handler method
         valid_scorers (dict): keeps in memory the current values
           of the validation metrics
         optim(:obj:`onmt.utils.optimizers.Optimizer`):
@@ -125,7 +119,6 @@ class Trainer(object):
         accum_steps(list): steps for accum gradients changes.
         n_gpu (int): number of gpu.
         gpu_rank (int): ordinal rank of the gpu in the list.
-        train_eval_steps (int): process a validation every x steps.
         report_manager(:obj:`onmt.utils.ReportMgrBase`):
           the object that creates reports, or None
         with_align (bool): whether to jointly lear alignment
@@ -148,7 +141,6 @@ class Trainer(object):
         train_loss,
         valid_loss,
         scoring_preparator,
-        train_scorers,
         valid_scorers,
         optim,
         trunc_size=0,
@@ -157,7 +149,6 @@ class Trainer(object):
         accum_steps=[0],
         n_gpu=1,
         gpu_rank=1,
-        train_eval_steps=200,
         report_manager=None,
         with_align=False,
         model_saver=None,
@@ -176,7 +167,6 @@ class Trainer(object):
         self.valid_loss = valid_loss
 
         self.scoring_preparator = scoring_preparator
-        self.train_scorers = train_scorers
         self.valid_scorers = valid_scorers
         self.optim = optim
         self.trunc_size = trunc_size
@@ -187,7 +177,6 @@ class Trainer(object):
         self.n_gpu = n_gpu
         self.gpu_rank = gpu_rank
         self.report_manager = report_manager
-        self.train_eval_steps = train_eval_steps
         self.with_align = with_align
         self.model_saver = model_saver
         self.average_decay = average_decay
@@ -205,7 +194,7 @@ class Trainer(object):
         # Set model in training mode.
         self.model.train()
 
-    def _training_eval_handler(self, scorer, preds, texts_ref):
+    def _eval_handler(self, scorer, preds, texts_ref):
         """Trigger metrics calculations
 
         Args:
@@ -442,7 +431,6 @@ class Trainer(object):
                         model_out, attns = valid_model(
                             src, tgt, src_len, with_align=self.with_align
                         )
-
                         # Compute loss.
                         _, batch_stats = self.valid_loss(batch, model_out, attns)
 
@@ -779,6 +767,7 @@ class Trainer(object):
                     grads, float(self.n_gpu)
                 )
             self.optim.step()
+
 
     def _start_report_manager(self, start_time=None):
         """Simple function to start report manager (if any)"""

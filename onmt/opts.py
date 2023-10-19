@@ -57,20 +57,6 @@ def _add_logging_opts(parser, is_train=True):
 
     if is_train:
         group.add(
-            "--train_eval_steps",
-            "-train_eval_steps",
-            type=int,
-            default=200,
-            help="calculate training metrics at this interval",
-        )
-        group.add(
-            "--train_metrics",
-            "-train_metrics",
-            default=[],
-            nargs="+",
-            help="List of names of additional training metrics",
-        )
-        group.add(
             "--valid_metrics",
             "-valid_metrics",
             default=[],
@@ -640,7 +626,7 @@ def model_opts(parser):
         default="rnn",
         #choices=["rnn", "brnn", "ggnn", "mean", "transformer", "cnn", "transformer_lm"],
         help="Type of encoder layer to use. Non-RNN layers "
-        "are experimental. Options are "
+        "are experimental. Default options are "
         "[rnn|brnn|ggnn|mean|transformer|cnn|transformer_lm].",
     )
     group.add(
@@ -650,7 +636,7 @@ def model_opts(parser):
         default="rnn",
         #choices=["rnn", "transformer", "cnn", "transformer_lm"],
         help="Type of decoder layer to use. Non-RNN layers "
-        "are experimental. Options are "
+        "are experimental. Default options are "
         "[rnn|transformer|cnn|transformer].",
     )
 
@@ -891,7 +877,39 @@ def model_opts(parser):
         help="Add bias to nn.linear of Query/Key/Value in MHA"
         "Note: this will add bias to output proj layer too",
     )
-
+    group.add(
+        "--multiquery",
+        "-multiquery",
+        action="store_true",
+        help="Use MultiQuery attention" "Note: https://arxiv.org/pdf/1911.02150.pdf",
+    )
+    group.add(
+        "--num_kv",
+        "-num_kv",
+        type=int,
+        default=0,
+        help="Number of heads for KV in the variant of MultiQuery attention (egs: Falcon 40B)",
+    )
+    group.add(
+        "--add_ffnbias",
+        "-add_ffnbias",
+        action="store_true",
+        help="Add bias to nn.linear of Position_wise FFN",
+    )
+    group.add(
+        "--parallel_residual",
+        "-parallel_residual",
+        action="store_true",
+        help="Use Parallel residual in Decoder Layer"
+        "Note: this is used by GPT-J / Falcon Architecture",
+    )
+    group.add(
+        "--shared_layer_norm",
+        "-shared_layer_norm",
+        action="store_true",
+        help="Use a shared layer_norm in parallel residual attention"
+        "Note: must be true for Falcon 7B / false for Falcon 40B",
+    )
     # Alignement options
     group = parser.add_argument_group("Model - Alignement")
     group.add(
@@ -1019,6 +1037,15 @@ def model_opts(parser):
         help="For FP16 training, the opt_level to use."
         "See https://nvidia.github.io/apex/amp.html#opt-levels.",
     )
+    group.add(
+        "--use_ckpting",
+        "-use_ckpting",
+        default=[],
+        nargs="+",
+        choices=["ffn", "mha", "lora"],
+        type=str,
+        help="use gradient checkpointing those modules",
+    )
 
 
 def _add_train_general_opts(parser):
@@ -1038,6 +1065,14 @@ def _add_train_general_opts(parser):
         help="Model filename (the model will be saved as "
         "<save_model>_N.pt where N is the number "
         "of steps",
+    )
+
+    group.add(
+        "--save_format",
+        "-save_format",
+        default="pytorch",
+        choices=["pytorch", "safetensors"],
+        help="Format to save the model weights",
     )
 
     group.add(
@@ -1137,15 +1172,6 @@ def _add_train_general_opts(parser):
         type=float,
         default=0.0,
         help="rule of thumb: same value as in main model",
-    )
-
-    group.add(
-        "--quant_layers",
-        "-quant_layers",
-        default=[],
-        nargs="+",
-        type=str,
-        help="list of layers to be compressed in 8bit.",
     )
 
     _add_reproducibility_opts(parser)
@@ -1323,6 +1349,9 @@ def _add_train_general_opts(parser):
             "sparseadam",
             "adafactor",
             "fusedadam",
+            "adamw8bit",
+            "pagedadamw8bit",
+            "pagedadamw32bit",
         ],
         help="Optimization method.",
     )
@@ -1527,6 +1556,27 @@ def _add_train_dynamic_data(parser):
     )
 
 
+def _add_quant_opts(parser):
+    group = parser.add_argument_group("Quant options")
+    group.add(
+        "--quant_layers",
+        "-quant_layers",
+        default=[],
+        nargs="+",
+        type=str,
+        help="list of layers to be compressed in 4/8bit.",
+    )
+
+    group.add(
+        "--quant_type",
+        "-quant_type",
+        default="bnb_8bit",
+        choices=["bnb_8bit", "bnb_FP4", "bnb_NF4"],
+        type=str,
+        help="Type of compression.",
+    )
+
+
 def train_opts(parser):
     """All options used in train."""
     # options relate to data preprare
@@ -1535,6 +1585,7 @@ def train_opts(parser):
     model_opts(parser)
     _add_train_general_opts(parser)
     _add_train_dynamic_data(parser)
+    _add_quant_opts(parser)
 
 
 def _add_decoding_opts(parser):
@@ -1821,6 +1872,8 @@ def translate_opts(parser, dynamic=False):
 
         # Adding options related to Transforms
         _add_dynamic_transform_opts(parser)
+
+    _add_quant_opts(parser)
 
 
 # Copyright 2016 The Chromium Authors. All rights reserved.

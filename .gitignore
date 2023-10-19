@@ -6,8 +6,10 @@ multi-bleu.perl
 .idea
 *.sublime-*
 .DS_Store
+for_deeplima
 data/
 *.kdev4
+=======
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -120,3 +122,4 @@ data/trankit_voc/
 
 # files from the tuto
 docs/source/examples/wmt17_en_de/ 
+*.kdev4
