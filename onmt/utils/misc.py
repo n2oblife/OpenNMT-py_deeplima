@@ -8,7 +8,6 @@ import numpy as np
 import os
 from copy import deepcopy
 
-
 class RandomShuffler(object):
     """Use random functions while keeping track of the random state to make it
     reproducible and deterministic.

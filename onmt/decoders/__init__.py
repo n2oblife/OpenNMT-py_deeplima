@@ -4,6 +4,7 @@ import importlib
 from onmt.decoders.decoder import DecoderBase, InputFeedRNNDecoder, StdRNNDecoder
 from onmt.decoders.transformer import TransformerDecoder, TransformerLMDecoder
 from onmt.decoders.cnn_decoder import CNNDecoder
+#from onmt.decoders.xlmradapted import XlmrAdaptedDecoder
 
 
 str2dec = {
@@ -12,6 +13,7 @@ str2dec = {
     "cnn": CNNDecoder,
     "transformer": TransformerDecoder,
     "transformer_lm": TransformerLMDecoder,
+    #"xlmr-adapted" : XlmrAdaptedDecoder,
 }
 
 __all__ = [
@@ -22,8 +24,8 @@ __all__ = [
     "InputFeedRNNDecoder",
     "str2dec",
     "TransformerLMDecoder",
+    #"XlmrAdapted",
 ]
-
 
 def get_decoders_cls(decoders_names):
     """Return valid encoder class indicated in `decoders_names`."""
@@ -42,13 +44,13 @@ def register_decoder(name):
         if name in str2dec:
             raise ValueError("Cannot register duplicate decoder ({})".format(name))
         if not issubclass(cls, DecoderBase):
-            raise ValueError(f"decoder ({name}: {cls.__name_}) must extend DecoderBase")
+            raise ValueError(
+                f"decoder ({name}: {cls.__name_}) must extend DecoderBase"
+            )
         str2dec[name] = cls
-        __all__.append(cls.__name__)  # added to be complete
+        __all__.append(cls.__name__) # added to be complete
         return cls
-
     return register_decoder_cls
-
 
 # Auto import python files in this directory
 decoder_dir = os.path.dirname(__file__)

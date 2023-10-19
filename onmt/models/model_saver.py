@@ -13,13 +13,7 @@ def build_model_saver(model_opt, opt, model, vocabs, optim):
     os.makedirs(os.path.dirname(save_model_path), exist_ok=True)
 
     model_saver = ModelSaver(
-        opt.save_model,
-        model,
-        model_opt,
-        vocabs,
-        optim,
-        opt.keep_checkpoint,
-        opt.save_format,
+        opt.save_model, model, model_opt, vocabs, optim, opt.keep_checkpoint,
     )
     return model_saver
 
@@ -196,6 +190,14 @@ class ModelSaver(ModelSaverBase):
             "opt": self.model_opt,
             "optim": self.optim.state_dict(),
         }
+        
+        # added for trankit
+        if self.model_opt.trankit:
+            checkpoint['config'] = model.encoder.xlmr.config # get the XLMRConfig from trankit
+            checkpoint['trankit_config'] = model.decoder._config # get the trankit config
+            step -= 1
+            if checkpoint['opt'].max_epoch > 1:
+                self.base_path+=f"_epoch_{checkpoint['opt'].max_epoch}"
 
         logger.info("Saving checkpoint %s_step_%d.pt" % (self.base_path, step))
         ckpt_path = "%s_step_%d.pt" % (self.base_path, step)

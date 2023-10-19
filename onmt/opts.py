@@ -8,6 +8,7 @@ from onmt.modules.position_ffn import ACTIVATION_FUNCTIONS
 from onmt.modules.position_ffn import ActivationFunction
 from onmt.constants import DefaultTokens
 
+# GOTO line 232 to add other arguments in the opt from .yaml
 
 def config_opts(parser):
     group = parser.add_argument_group("Configuration")
@@ -216,6 +217,58 @@ def _add_dynamic_corpus_opts(parser, build_vocab_only=False):
         + "this number of transformed samples/corpus. Can be [-1, 0, N>0]. "
         "Set to -1 to go full corpus, 0 to skip.",
     )
+    # ----------------------------------------------------------------------------
+    # groups adds from n2oblife for deeplima
+    group.add(
+        "-task",
+        "--task",
+        type=str,
+        default='posdep',
+        help="Task to use for the Trankit's training.",
+    )
+    group.add(
+        "-embedding_name",
+        "--embedding_name",
+        type=str,
+        default='xlm-roberta-base',
+        help="only useful for the trankit's embedding",
+    )
+    group.add(
+        "-treebank_name",
+        "--treebank_name",
+        type=str,
+        help="used in the trankit's config",
+    )
+    group.add(
+        "-lang",
+        "--lang",
+        type=str,
+        default='english',
+        help="used in the trankit's config",
+    )
+    group.add(
+        "-category",
+        "--category",
+        type=str,
+        default='english',
+        help="used in the trankit's config",
+    )
+    group.add(
+        "-trankit",
+        "--trankit",
+        type=bool,
+        default=False,
+        help="It triggers the launch of the trankit's training"
+        )
+    group.add(
+        "-max-epoch",
+        "--max-epoch",
+        type=int,
+        default=1,
+        help="The number of epoch for the training"
+    )
+    # ----------------------------------------------------------------------------
+
 
     if not build_vocab_only:
         group.add(
@@ -571,6 +624,7 @@ def model_opts(parser):
         "-encoder_type",
         type=str,
         default="rnn",
+        #choices=["rnn", "brnn", "ggnn", "mean", "transformer", "cnn", "transformer_lm"],
         help="Type of encoder layer to use. Non-RNN layers "
         "are experimental. Default options are "
         "[rnn|brnn|ggnn|mean|transformer|cnn|transformer_lm].",
@@ -580,6 +634,7 @@ def model_opts(parser):
         "-decoder_type",
         type=str,
         default="rnn",
+        #choices=["rnn", "transformer", "cnn", "transformer_lm"],
         help="Type of decoder layer to use. Non-RNN layers "
         "are experimental. Default options are "
         "[rnn|transformer|cnn|transformer].",

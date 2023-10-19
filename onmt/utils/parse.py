@@ -15,7 +15,7 @@ class DataOptsCheckerMixin(object):
     def _validate_file(file_path, info):
         """Check `file_path` is valid or raise `IOError`."""
         if not os.path.isfile(file_path):
-            raise IOError(f"Please check path of your {info} file!")
+            raise IOError(f"Please check path of your {file_path}, {info} file!")
 
     @classmethod
     def _validate_data(cls, opt):
@@ -25,8 +25,13 @@ class DataOptsCheckerMixin(object):
         default_transforms = opt.transforms
         if len(default_transforms) != 0:
             logger.info(f"Default transforms: {default_transforms}.")
+      
+        # if type(opt.data) == str:
+        #     with open(opt.data) as f:
+        #         corpora = yaml.safe_load(f)
+        # else:
         corpora = yaml.safe_load(opt.data)
-
+            
         for cname, corpus in corpora.items():
             # Check Transforms
             _transforms = corpus.get("transforms", None)

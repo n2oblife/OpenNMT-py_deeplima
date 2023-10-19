@@ -7,6 +7,7 @@ from onmt.encoders.ggnn_encoder import GGNNEncoder
 from onmt.encoders.rnn_encoder import RNNEncoder
 from onmt.encoders.cnn_encoder import CNNEncoder
 from onmt.encoders.mean_encoder import MeanEncoder
+#from onmt.encoders.nllb_encoder import NllbEncoder
 
 
 str2enc = {
@@ -16,6 +17,7 @@ str2enc = {
     "cnn": CNNEncoder,
     "transformer": TransformerEncoder,
     "mean": MeanEncoder,
+    #"nllb": NllbEncoder,
 }
 
 __all__ = [
@@ -26,6 +28,7 @@ __all__ = [
     "CNNEncoder",
     "MeanEncoder",
     "str2enc",
+    #"NllbEncoder",
 ]
 
 
@@ -46,13 +49,13 @@ def register_encoder(name):
         if name in str2enc:
             raise ValueError("Cannot register duplicate encoder ({})".format(name))
         if not issubclass(cls, EncoderBase):
-            raise ValueError(f"encoder ({name}: {cls.__name_}) must extend EncoderBase")
+            raise ValueError(
+                f"encoder ({name}: {cls.__name_}) must extend EncoderBase"
+            )
         str2enc[name] = cls
-        __all__.append(cls.__name__)  # added to be complete
+        __all__.append(cls.__name__) # added to be complete
         return cls
-
     return register_encoder_cls
-
 
 # Auto import python files in this directory
 encoder_dir = os.path.dirname(__file__)

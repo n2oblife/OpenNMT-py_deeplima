@@ -31,7 +31,85 @@ class ScoringPreparator:
         transforms = make_transforms(self.opt, transforms_cls, self.vocabs)
         self.transform = TransformPipe.build_from(transforms.values())
 
-    def translate(self, model, gpu_rank, step):
+    def ids_to_tokens_batch_side(self, batch, side):
+        """Convert a batch into a list of transformed sentences
+        Args:
+            batch: batch yielded from `DynamicDatasetIter` object
+            side (string): 'src' or 'tgt'.
+        Returns
+            transformed_sentences (list): List of lists of tokens.
+                Each list is a transformed sentence.
+        """
+        vocab = self.vocabs[side]
+        batch_side = batch[side]
+        nb_sentences = batch_side.shape[0]
+        nb_tokens_per_sentence = batch_side.shape[1]
+        nb_feats = batch_side.shape[2] - 1
+
+        indices_to_remove = [
+            vocab.lookup_token(token)
+            for token in [DefaultTokens.PAD, DefaultTokens.EOS, DefaultTokens.BOS]
+        ]
+        transformed_sentences = []
+        for i in range(nb_sentences):
+            tokens = [
+                vocab.lookup_index(batch_side[i, t, 0])
+                for t in range(nb_tokens_per_sentence)
+                if batch_side[i, t, 0] not in indices_to_remove
+            ]
+            transformed_sentences.append(tokens)
+
+        if nb_feats > 0:
+            transformed_feats = []
+            for i_feat in range(nb_feats):
+                fv = self.vocabs["src_feats"][i_feat]
+                indices_to_remove = [
+                    fv.lookup_token(token)
+                    for token in [
+                        DefaultTokens.PAD,
+                        DefaultTokens.EOS,
+                        DefaultTokens.BOS,
+                    ]
+                ]
+                transformed_feat = []
+                for i in range(nb_sentences):
+                    tokens = [
+                        fv.lookup_index(batch_side[i, t, i_feat + 1])
+                        for t in range(nb_tokens_per_sentence)
+                        if batch_side[i, t, i_feat + 1] not in indices_to_remove
+                    ]
+                    transformed_feat.append(tokens)
+                transformed_feats.append(transformed_feat)
+        else:
+            transformed_feats = [repeat(None)]
+
+        return transformed_sentences, transformed_feats
+
+    def ids_to_tokens_batch(self, batch):
+        """Reconstruct transformed source and reference
+        sentences from a batch.
+        Args:
+            batch: batch yielded from `DynamicDatasetIter` object
+        Returns:
+            transformed_batch(list): A list of examples
+        with the fields "src" and "tgt"
+        """
+        transformed_srcs, transformed_src_feats = self.ids_to_tokens_batch_side(
+            batch, "src"
+        )
+        transformed_tgts, _ = self.ids_to_tokens_batch_side(batch, "tgt")
+        transformed_batch = []
+        for src, tgt, *src_feats in zip(
+            transformed_srcs, transformed_tgts, *transformed_src_feats
+        ):
+            ex = {"src": src, "tgt": tgt}
+            if src_feats[0] is not None:
+                ex["src_feats"] = src_feats
+            transformed_batch.append(ex)
+
+        return transformed_batch
+
+    def translate(self, model, transformed_batches, gpu_rank, step, mode):
         """Compute and save the sentences predicted by the
         current model's state related to a batch.
 

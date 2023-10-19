@@ -164,6 +164,7 @@ You can test other decoding methods and paramaters.
 We have also provided a gradio application to chat with the model.
 
 ```shell
+pip install gradio
 gradio chatbot.py
 ```
 You must use `inf_type = "-py"` at the beginning of the `chatbot.py` script.

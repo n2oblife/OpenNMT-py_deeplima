@@ -6,6 +6,10 @@ multi-bleu.perl
 .idea
 *.sublime-*
 .DS_Store
+for_deeplima
+data/
+*.kdev4
+=======
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -93,6 +97,8 @@ celerybeat-schedule
 env/
 venv/
 ENV/
+onmt_env/
+onmt_env_previous/
 
 # Spyder project settings
 .spyderproject
@@ -110,4 +116,10 @@ ENV/
 # Tensorboard
 runs/
 
+# cache from trankit
+cache/
+data/trankit_voc/
+
+# files from the tuto
+docs/source/examples/wmt17_en_de/ 
 *.kdev4

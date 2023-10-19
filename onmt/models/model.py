@@ -177,23 +177,47 @@ class NMTModel(BaseModel):
         self.encoder = encoder
         self.decoder = decoder
 
-    def forward(self, src, tgt, src_len, bptt=False, with_align=False):
+    def forward(self, src, tgt, src_len, bptt=False, with_align=False, trankit=False):
         """An NMTModel forward the src side to the encoder.
         Then the output of encoder ``enc_out`` is forwarded to the
         decoder along with the target excluding the last token.
         The decoder state is initiliazed with:
         * enc_final_hs in the case of RNNs
         * enc_out + enc_final_hs in the case of CNNs
-        * src in the case of Transformer"""
+        * src in the case of Transformer
 
-        dec_in = tgt[:, :-1, :]
-        enc_out, enc_final_hs, src_len = self.encoder(src, src_len)
-        if not bptt:
-            self.decoder.init_state(src, enc_out, enc_final_hs)
-        dec_out, attns = self.decoder(
-            dec_in, enc_out, src_len=src_len, with_align=with_align
-        )
-        return dec_out, attns
+        Args:
+            src (_type_): _description_
+            tgt (_type_): _description_
+            src_len (_type_): _description_
+            bptt (bool, optional): _description_. Defaults to False.
+            with_align (bool, optional): _description_. Defaults to False.
+            trankit (bool, optional): _description_. Defaults to False.
+
+        Returns:
+        trankit : False ->
+            dec_out, attns
+        trankit : True -> 
+            predictions, word_reprs.att
+            with predictions = 0-upos / 1-xpos / 2-feats / 3-heads+deprel (deps)
+        """
+
+        if not(trankit):
+            dec_in = tgt[:, :-1, :]
+            enc_out, enc_final_hs, src_len = self.encoder(src, src_len)
+            if not bptt:
+                self.decoder.init_state(src, enc_out, enc_final_hs)
+            dec_out, attns = self.decoder(
+                dec_in, enc_out, src_len=src_len, with_align=with_align
+            )
+            return dec_out, attns
+        else:
+            # TODO adapter les sorties de la version trankit pour qu'elles correspondent tout en gardant les particularités de trankit
+            # faire en sorte que le forward donne la prediction et avoir des fonctions supplémentaires pour l'entrainement
+            word_reprs, cls_reprs = self.encoder(src)
+            predictions = self.decoder(src, word_reprs, cls_reprs) # revoir la sortie du decoder et de la fonction
+            return predictions, word_reprs.att
+
 
     def update_dropout(self, dropout, attention_dropout):
         self.encoder.update_dropout(dropout, attention_dropout)
